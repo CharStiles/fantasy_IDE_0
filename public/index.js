@@ -112,7 +112,29 @@ let camera;// new Camera();
 
 function start() {}
 
+function getSelectionText() {
+  let text = "";
 
+  if (window.getSelection) {
+      text = window.getSelection().toString();
+  } else if (document.selection && document.selection.type != "Control") {
+      text = document.selection.createRange().text;
+  }
+
+  return text;
+}
+function handleRightClick(event) {
+  event.preventDefault(); // Prevent the default context menu
+  const selectedText = getSelectionText();
+  console.log("Selected text:", selectedText);
+  if (selectedText != ""){
+  sendCodeOverWire("normal", selectedText);
+  }
+  // You can perform any action with the selected text here
+}
+
+// Add event listener to the document
+document.addEventListener('contextmenu', handleRightClick);
 
 // from here https://hackernoon.com/creative-coding-using-the-microphone-to-make-sound-reactive-art-part1-164fd3d972f3
 // A more accurate way to get overall volume
@@ -152,7 +174,7 @@ function init() {
   timeSinceStuck = Date.now();
   // SOCKET IO
   socket = io();
-  addSendButton()
+  // addSendButton()
 
   var editorContainer = document.getElementById("editor");
   editor = CodeMirror(editorContainer, {
@@ -170,13 +192,20 @@ function init() {
   addCodeMirrorEditorModifier()
   socket.on('code', function(shaderCode) {
     console.log("got code from socketIO")
+    
     _fragmentShader = shaderCode;
-    needsUpdate = true;
+
+   // needsUpdate = true;
     sentCode = false;
     hasError = false;
-    editor.setValue(shaderCode);
-    onEdit()
-    console.log("got code from socketIO")
+    //editor.setValue(shaderCode);
+    navigator.clipboard.writeText(shaderCode).then(() => {
+      console.log('Shader code copied to clipboard');
+    }).catch(err => {
+      console.error('Failed to copy shader code: ', err);
+    });
+    //onEdit()
+    //console.log("got code from socketIO")
 
   });
 
@@ -190,10 +219,11 @@ function onEdit() {
 }
 
 function updateShader(fragmentCode) {
-  if (!checkFragmentShader(fragmentCode)) {
+  if (checkFragmentShader(fragmentCode) != []) {
+    console.log("error in shader");
     return;
   }
-
+  console.log("NO error in shader");
   _fragmentShader = fragmentCode;
 
   isDirty = true;
@@ -246,7 +276,7 @@ function animateScene() {
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 
     window.requestAnimationFrame(function(currentTime) {
-      previousTime = previousTime + .05;
+      previousTime = previousTime + .005;
       // TODO here check dirty bit and recompile?
       if (isDirty) {
         // recompile and clear dirty bit
@@ -261,15 +291,7 @@ function animateScene() {
     // console.log("cur time")
     // console.log(Date.now())
   
-      if (timeSinceStuck + timeElapsedToGetHelp < Date.now() && sentCode == false && hasError == true){
-        console.log("sent code")
-        console.log(sentCode)
-        console.log("has error")
-        console.log(hasError)
-        sendCodeOverWire("normal");
-        
-        console.log("asking for help...")
-      }
+    
   
 }
 
@@ -353,27 +375,27 @@ function fragmentShader() {
 // add a button that is overlayed over the canvas that calles sendoverwire
 
 /// add html button from javasctipt that calls sendoverwire
-function addSendButton() {
-  var button = document.createElement("button");
-  button.innerHTML = "mix It Up";
-  button.style = "position: absolute; top: 10px; right: 10px; z-index: 1000;";
-  // onclick event with parameter
-  button.onclick = function() {
-    console.log("mixxxie");
-    sendCodeOverWire("mixup");
-  };
-  document.body.appendChild(button);
-}
+// function addSendButton() {
+//   var button = document.createElement("button");
+//   button.innerHTML = "mix It Up";
+//   button.style = "position: absolute; top: 10px; right: 10px; z-index: 1000;";
+//   // onclick event with parameter
+//   button.onclick = function() {
+//     console.log("mixxxie");
+//     sendCodeOverWire("mixup");
+//   };
+//   document.body.appendChild(button);
+// }
 
 
 
 
 
 
-function sendCodeOverWire(com) {
+function sendCodeOverWire(com, code) {
   sentCode = true;
   hasError = false;
-  var data = {fs:fragmentShader(), comment:com}
+  var data = {fs:code, comment:com}
   socket.emit('livecode-update', data);
   
 }
@@ -382,7 +404,7 @@ function sendCodeOverWire(com) {
 // true if it can
 function checkFragmentShader(shaderCode, lint = false) {
   if (!gl) {
-    return;
+    return ;
   }
   let shader = gl.createShader(gl.FRAGMENT_SHADER);
   gl.shaderSource(shader, shaderCode);
@@ -399,65 +421,58 @@ function checkFragmentShader(shaderCode, lint = false) {
         message: splitResult[3] + splitResult[4],
         character: splitResult[1],
         line: splitResult[2]
+
       })
     }
   }
   
   if (result) {
-    
     console.log("did update");
     _fragmentShader = shaderCode;
     isDirty = true;
-    hasError = false;
   }
 
   return ret;
 }
 
 
+
 (function(mod) {
-    mod(CodeMirror);
+  mod(CodeMirror);
 })(function(CodeMirror) {
-  "use strict";
-  console.log("executing linting code...")
-  function validator(text, options) {
-    
-    var result = [];
-    var errors = checkFragmentShader(text, true);
-    if (errors) parseErrors(errors, result);
-    return result;
-  }
+"use strict";
 
-  CodeMirror.registerHelper("lint", "x-shader/x-vertex", validator);
+function validator(text, options) {
+  var result = [];
+  var errors = checkFragmentShader(text, true);
+  if (errors) parseErrors(errors, result);
+  return result;
+}
 
-  function parseErrors(errors, output) {
-    for ( var i = 0; i < errors.length; i++) {
-      var error = errors[i];
-      if (error) {
-        if (Number(error.line) <= 0) {
-          console.warn("Cannot display error (invalid line " + error.line + ")", error);
-          continue;
-        }
+CodeMirror.registerHelper("lint", "x-shader/x-vertex", validator);
 
-        var start = error.character - 1, end = start + 1;
-
-
-        // Convert to format expected by validation service
-        var hint = {
-          message: error.message,
-          severity: "error",
-          from: CodeMirror.Pos(Number(error.line) - 1, start),
-          to: CodeMirror.Pos(Number(error.line) - 1, end)
-        };
-
-        output.push(hint);
-              // check to see if the time has elasped to get help 
-      if(hasError == false){
-        timeSinceStuck = Date.now();
-        hasError = true;
-    }
+function parseErrors(errors, output) {
+  for ( var i = 0; i < errors.length; i++) {
+    var error = errors[i];
+    if (error) {
+      if (Number(error.line) <= 0) {
+        console.warn("Cannot display error (invalid line " + error.line + ")", error);
+        continue;
       }
-    }
 
+      var start = error.character - 1, end = start + 1;
+
+
+      // Convert to format expected by validation service
+      var hint = {
+        message: error.message,
+        severity: "error",
+        from: CodeMirror.Pos(Number(error.line) - 1, start),
+        to: CodeMirror.Pos(Number(error.line) - 1, end)
+      };
+
+      output.push(hint);
+    }
   }
+}
 });

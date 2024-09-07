@@ -127,7 +127,7 @@ io.on("connection", function(socket) {
     }
       else{
         console.log("CHANGE");
-        _code = await sendMessage("change this code to working code, replace any gibberish with new lines of code that will compile, do your best dont delete any lines of code \n"+code.fs);;
+        _code = await sendMessage("//just send back code in glsl any non-code must be commented like this \n"+code.fs);;
 
     }
     //if(code.who == process.env.EDITOR){
