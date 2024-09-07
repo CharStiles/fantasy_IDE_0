@@ -51,12 +51,33 @@ let sentCode = false;
 var FFT_SIZE = 512;
 var vol;
 
+
+let currentShaderIndex = 2;
+const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC];
+
+function setupShaderCycling() {
+  document.addEventListener('keydown', (event) => {
+    if (event.metaKey) { // Command key on Mac, Windows key on Windows
+      if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        currentShaderIndex = (currentShaderIndex - 1 + shaders.length) % shaders.length;
+        updateShader(shaders[currentShaderIndex]);
+      } else if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        currentShaderIndex = (currentShaderIndex + 1) % shaders.length;
+        updateShader(shaders[currentShaderIndex]);
+      }
+    }
+  });
+}
+
+
 if (window.isProduction && window.location.protocol !== "https:") {
   window.location = "https://" + window.location.hostname;
 }
 
 let button = document.querySelector("button");
-
+setupShaderCycling()
 
 function start() {}
 
@@ -83,6 +104,55 @@ function handleRightClick(event) {
 
 // Add event listener to the document
 document.addEventListener('contextmenu', handleRightClick);
+
+
+let d = 0; // Initialize the global variable d
+
+function setupDToggle() {
+  // Keyboard listener
+  document.addEventListener('keydown', (event) => {
+    if (event.shiftKey && event.key === 'ArrowRight') {
+
+      event.preventDefault();
+      toggleD();
+    }
+  });
+
+  // MIDI listener
+  if (navigator.requestMIDIAccess) {
+    navigator.requestMIDIAccess()
+      .then(onMIDISuccess, onMIDIFailure);
+  } else {
+    console.log("WebMIDI is not supported in this browser.");
+  }
+}
+
+function toggleD() {
+  d = 1 - d; // Toggle between 1 and 0
+  // If you want to update the shader when d changes, you can call updateShader here
+  // updateShader(_fragmentShader);
+}
+
+function onMIDISuccess(midiAccess) {
+  for (var input of midiAccess.inputs.values()) {
+    input.onmidimessage = onMIDIMessage;
+  }
+}
+
+function onMIDIFailure(error) {
+  console.log("Could not access your MIDI devices: ", error);
+}
+
+function onMIDIMessage(message) {
+  // Toggle d for every MIDI message received
+  toggleD();
+  
+  // You can add more specific MIDI handling here if needed
+  // console.log('MIDI data', message.data);
+}
+
+// Call this function to set up the listeners
+setupDToggle();
 
 // from here https://hackernoon.com/creative-coding-using-the-microphone-to-make-sound-reactive-art-part1-164fd3d972f3
 // A more accurate way to get overall volume
@@ -198,18 +268,26 @@ function animateScene() {
     uVol =
           gl.getUniformLocation(shaderProgram, "u_vol");
 
+    uDrop =
+          gl.getUniformLocation(shaderProgram, "drop");
+     
     gl.uniform2fv(uResolution, resolution);
     gl.uniform1f(uTime, previousTime);
-    if (camera && camera.analyser) {
-      var bufferLength = camera.analyser.frequencyBinCount;
-      var dataArray = new Uint8Array(bufferLength);
+    
+
+    gl.uniform1f(uDrop, d);
+
+
+    // if (camera && camera.analyser) {
+    //   var bufferLength = camera.analyser.frequencyBinCount;
+    //   var dataArray = new Uint8Array(bufferLength);
   
-      camera.analyser.getByteTimeDomainData(dataArray);
-      gl.uniform1f(uVol, getRMS(dataArray));
-    }
-    else{
+    //   camera.analyser.getByteTimeDomainData(dataArray);
+    //   gl.uniform1f(uVol, getRMS(dataArray));
+    // }
+    // else{
       gl.uniform1f(uVol, 0.0);
-    }
+    //}
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 

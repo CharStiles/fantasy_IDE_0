@@ -139,7 +139,7 @@ button:active {
   overflow: hidden !important;
   position: absolute !important;
   /* background-color: rgba(0,0,0,.5) !important; */
-  background: linear-gradient(#F2610100, #08AEEA, #F2610100), rgba(0,0,0,0.2) !important;
+  background: linear-gradient(#F2610100, #c1c1c1, #F2610100), rgba(0,0,0,0.2) !important;
   scrollbar-color: rgba(0.5,0.5,0.5,1.0) rgba(0.5,0.5,0.5,.0); /* Mozilla styles */
 }
 
