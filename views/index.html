@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>ide that always compiles
+    </title>    
+    <!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css"> -->
+    
+    <link rel="stylesheet" type="text/css" href="style.css" title="shaderplace">
+    <link rel="stylesheet" type="text/css" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/addon/lint/lint.min.css">
+    
+    <!-- <script src="camera.js" defer></script> -->
+    <script src="defaultShaders.js" ></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/lint/lint.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/mode/clike/clike.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/lint/lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.5/addon/lint/javascript-lint.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="lint.css">
+
+    <script type="text/javascript" src="./index.js" async></script>
+  <!--  <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@fb322bc51e38272b3afa927a293c5844bdc3782c/dist/aframe-master.min.js"></script>
+  -->
+  </head>
+  <body>
+
+    <div class="wrapper">
+      <div class="editor-mode" id="editor"></div>
+      <div class="u-displaywrapper">
+        <canvas id="glcanvas" class="u-displaywrapper">
+          Oh no! Your browser doesn't support canvas!
+        </canvas>
+      </div>
+    </div>
+    <div class="vidholder"></div>
+    <a-scene>
+      <a-camera>          
+      </a-camera>          
+    </a-scene> 
+  </body>
+</html>
