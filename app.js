@@ -8,9 +8,6 @@ var logger = require("morgan");
 const dotenv = require("dotenv");
 dotenv.config();
 
-var indexRouter = require("./routes/index");
-var usersRouter = require("./routes/users");
-
 
 var app = express();
 const server = require("http").createServer(app);
@@ -81,7 +78,9 @@ if (process.env.NODE_ENV === "development") {
 app.get("/", function(request, response) {
   response.sendFile(__dirname + "/views/index.html");
 });
-
+app.get("/editor", function(request, response) {
+  response.sendFile(__dirname + "/views/editor.html");
+});
 const listener = server.listen(process.env.PORT || 3000, function() {
   console.log("Your app is listening on port " + listener.address().port);
 });

@@ -15,7 +15,7 @@ var gl;
 
 var editor;
 let glCanvas = null;
-let _fragmentShader = _fragmentShaderC;
+
 
 // Current state storage
 var isDirty = false;
@@ -53,10 +53,64 @@ var vol;
 let m = 0;
 
 
-let currentShaderIndex = 2;
+let currentShaderIndex = 1;
+const urlParams = new URLSearchParams(window.location.search);
+const shaderParam = urlParams.get('shader');
 const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC];
 
+// Set currentShaderIndex based on URL parameter or default to 2
+currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 1;
+
+// Ensure currentShaderIndex is within valid range
+currentShaderIndex = Math.max(0, Math.min(currentShaderIndex, shaders.length - 1));
+
+
+let _fragmentShader = shaders[currentShaderIndex];
+
+let isExpanded = false;
+
+window.addEventListener('message', (event) => {
+  if (event.data.type === 'setup') {
+    setupEscapeHandler();
+  } else if (event.data.type === 'reset') {
+    isExpanded = false;
+  }
+});
+
+function setupEscapeHandler() {
+  document.addEventListener('keydown', (e) => {
+    console.log("Key pressed:", e.key);
+    console.log("isExpanded:", isExpanded);
+    
+    if (e.key === 'Escape') {
+      console.log("Escape key pressed");
+      if (isExpanded) {
+        e.preventDefault();
+        console.log("Escape pressed while expanded");
+        window.parent.postMessage({ type: 'escape' }, '*');
+      } else {
+        console.log("Escape pressed, but not expanded");
+      }
+    }
+  });
+}
+
+
+
+// Make sure to call these setup functions
+// setupEscapeHandler();
+// setupSelectionHandler();
+
+// Modify your existing expand function or add this if you don't have one
+function expandIframe() {
+  isExpanded = true;
+  // ... other expand logic ...
+}
+
 function setupShaderCycling() {
+  // Get the shader index from URL parameter
+
+  
   document.addEventListener('keydown', (event) => {
     if (event.metaKey) { // Command key on Mac, Windows key on Windows
       if (event.key === 'ArrowLeft') {
@@ -206,6 +260,7 @@ function init() {
   });
 
   editor.on('change', onEdit);
+  setupSelectionHandler();
   onEdit();
  
   addCodeMirrorEditorModifier()
@@ -228,11 +283,14 @@ function init() {
 
   });
 
+  setupEscapeHandler();
+
 }
 
 
 // this function will trigger a change to the editor
 function onEdit() {
+  isExpanded = true;
   const fragmentCode = editor.getValue();
   updateShader(fragmentCode);
 }
@@ -290,7 +348,7 @@ function animateScene() {
     //   camera.analyser.getByteTimeDomainData(dataArray);
     //   gl.uniform1f(uVol, getRMS(dataArray));
     // }
-    // else{
+    //else{
       gl.uniform1f(uVol, 0.0);
     //}
 

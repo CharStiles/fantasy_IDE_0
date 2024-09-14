@@ -1,522 +1,283 @@
-/* eslint-env browser */
+function createMovingIframes() {
+  const directions = [
+    { x: -1, y: -1 },
+    { x: 1, y: 1 },
+    { x: -1, y: 1 },
+    { x: 1, y: -1 }
+  ];
 
-// @ts-ignore
-// import CodeMirror from "codemirror";
-// import "codemirror/mode/clike/clike.js";
-// import 'codemirror/addon/lint/lint';
-// import {_fragmentShaderC, _vertexShaderC} from "./defaultShaders.js";
+  let activeIframe = null;
+  let animationFrames = [];
+  let transitionEnabled = false;
+  let containers = [];
+  let animationState = 0; // 0: Still, 1: Animated with ease, 2: Animated without ease
 
-// const CodeMirror = require("./dist/codemirror.js");
-// const {_fragmentShaderC, _vertexShaderC} = require("./defaultShaders.js");
-// require("codemirror/mode/clike/clike.js");
+  function createIframe(index) {
+    const dir = directions[index % directions.length];
+    const container = document.createElement('div');
+    container.id = `item-${index}`;
+    container.style.position = 'absolute';
+    container.style.overflow = 'hidden';
+    container.style.width = '200px';
+    container.style.height = '150px';
+    container.style.transition = transitionEnabled ? 'all 0.3s ease-in-out' : '';
 
-// Element storage
-var gl;
+    const iframe = document.createElement('iframe');
+    iframe.src = `editor?shader=${index}`;
+    iframe.style.width = '100%';
+    iframe.style.height = '100%';
+    iframe.style.border = 'none';
+    iframe.style.pointerEvents = 'none'; // Disable pointer events on iframe
 
-var editor;
-let glCanvas = null;
-let _fragmentShader = _fragmentShaderC;
-
-// Current state storage
-var isDirty = false;
-let shaderProgram;
-var socket;
-// Aspect ratio and coordinate system
-// details
-let aspectRatio;
-let resolution;
-
-// Vertex information
-let vertexArray;
-let vertexBuffer;
-let vertexNumComponents;
-let vertexCount;
-
-// Rendering data shared with the
-// scalers.
-let uResolution;
-let uTime;
-let uVol;
-let aVertexPosition;
-
-let timeSinceStuck = 0;
-let timeElapsedToGetHelp = 1000;
-let hasError =false;
-
-// Animation timing
-let previousTime = 0.0;
-// this script is from cut-ruby.glitch.me
-let sentCode = false;
-// so good
-var FFT_SIZE = 512;
-var vol;
-let m = 0;
-
-
-let currentShaderIndex = 2;
-const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC];
-
-function setupShaderCycling() {
-  document.addEventListener('keydown', (event) => {
-    if (event.metaKey) { // Command key on Mac, Windows key on Windows
-      if (event.key === 'ArrowLeft') {
-        event.preventDefault();
-        currentShaderIndex = (currentShaderIndex - 1 + shaders.length) % shaders.length;
-        editor.setValue(shaders[currentShaderIndex]);
-        updateShader(shaders[currentShaderIndex]);
-      } else if (event.key === 'ArrowRight') {
-        event.preventDefault();
-        currentShaderIndex = (currentShaderIndex + 1) % shaders.length;
-        editor.setValue(shaders[currentShaderIndex]);
-        updateShader(shaders[currentShaderIndex]);
-      }
-    }
-  });
-}
-
-
-if (window.isProduction && window.location.protocol !== "https:") {
-  window.location = "https://" + window.location.hostname;
-}
-
-let button = document.querySelector("button");
-setupShaderCycling()
-
-function start() {}
-
-function getSelectionText() {
-  let text = "";
-
-  if (window.getSelection) {
-      text = window.getSelection().toString();
-  } else if (document.selection && document.selection.type != "Control") {
-      text = document.selection.createRange().text;
-  }
-
-  return text;
-}
-function handleRightClick(event) {
-  event.preventDefault(); // Prevent the default context menu
-  const selectedText = getSelectionText();
-  console.log("Selected text:", selectedText);
-  if (selectedText != ""){
-  sendCodeOverWire("normal", selectedText);
-  }
-  // You can perform any action with the selected text here
-}
-
-// Add event listener to the document
-document.addEventListener('contextmenu', handleRightClick);
-
-
-let d = 0; // Initialize the global variable d
-
-function setupDToggle() {
-  // Keyboard listener
-  document.addEventListener('keydown', (event) => {
-    if (event.shiftKey && event.key === 'ArrowRight') {
-
-      event.preventDefault();
-      d = (message.data[0] == 144);
-      m = message.data[0];
-    }
-  });
-
-  // MIDI listener
-  if (navigator.requestMIDIAccess) {
-    navigator.requestMIDIAccess()
-      .then(onMIDISuccess, onMIDIFailure);
-  } else {
-    console.log("WebMIDI is not supported in this browser.");
-  }
-}
-
-
-function onMIDISuccess(midiAccess) {
-  for (var input of midiAccess.inputs.values()) {
-    input.onmidimessage = onMIDIMessage;
-  }
-}
-
-function onMIDIFailure(error) {
-  console.log("Could not access your MIDI devices: ", error);
-}
-
-function onMIDIMessage(message) {
-  // Toggle d for every MIDI message received
-  //toggleD(message.data[0]);
-  d = (message.data[0] == 144);
-  m = message.data[0]
-  // You can add more specific MIDI handling here if needed
-  console.log('MIDI data', message.data[0]);
-
-
-}
-
-// Call this function to set up the listeners
-setupDToggle();
-
-// from here https://hackernoon.com/creative-coding-using-the-microphone-to-make-sound-reactive-art-part1-164fd3d972f3
-// A more accurate way to get overall volume
-function getRMS(spectrum) {
-  var rms = 0;
-  for (var i = 0; i < spectrum.length; i++) {
-    rms += spectrum[i] * spectrum[i];
-  }
-  rms /= spectrum.length;
-  rms = Math.sqrt(rms);
-  let norm = rms / 128;
-  return (norm - 0.99) * 100;
-}
-
-function isInPresentationMode() {
-  if (window.location.pathname.split('/').pop() == 'present.html') {
-    return true;
-  }
-  return true;
-}
-
-function addCodeMirrorPresentModifier() {
-  const codeMirrorDiv = document.querySelector(".CodeMirror");
-  if (codeMirrorDiv) {
-    codeMirrorDiv.classList.add("CodeMirror-present");
-  }
-}
-
-function addCodeMirrorEditorModifier() {
-  const codeMirrorDiv = document.querySelector(".CodeMirror");
-  if (codeMirrorDiv) codeMirrorDiv.classList.add("CodeMirror-editor");
-}
-
-function init() {
- 
-  //set time now to timesincestuck
-  timeSinceStuck = Date.now();
-  // SOCKET IO
-  socket = io();
-
-  var editorContainer = document.getElementById("editor");
-  editor = CodeMirror(editorContainer, {
-    value: _fragmentShader,
-    lineNumbers: true,
-    mode: "x-shader/x-vertex",
-    gutters: ["CodeMirror-lint-markers"],
-    lint: true,
-    lineWrapping: !isInPresentationMode()
-  });
-
-  editor.on('change', onEdit);
-  onEdit();
- 
-  addCodeMirrorEditorModifier()
-  socket.on('code', function(shaderCode) {
-    console.log("got code from socketIO")
-    
-    _fragmentShader = shaderCode;
-
-   // needsUpdate = true;
-    sentCode = false;
-    hasError = false;
-    //editor.setValue(shaderCode);
-    navigator.clipboard.writeText(shaderCode).then(() => {
-      console.log('Shader code copied to clipboard');
-    }).catch(err => {
-      console.error('Failed to copy shader code: ', err);
-    });
-    //onEdit()
-    //console.log("got code from socketIO")
-
-  });
-
-}
-
-
-// this function will trigger a change to the editor
-function onEdit() {
-  const fragmentCode = editor.getValue();
-  updateShader(fragmentCode);
-}
-
-function updateShader(fragmentCode) {
-  if (checkFragmentShader(fragmentCode) != []) {
-    console.log("error in shader");
-    return;
-  }
-  console.log("NO error in shader");
-  _fragmentShader = fragmentCode;
-
-  isDirty = true;
-}
-
-window.onload = (event) => {
-  webgl_startup();
-  console.log("init")
-  init();
-
-}
-
-function animateScene() {
-    gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-    // This sets background color
-    gl.clearColor(1, 1, 1, 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    gl.useProgram(shaderProgram);
-
-    uResolution =
-          gl.getUniformLocation(shaderProgram, "u_resolution");
-    uTime =
-          gl.getUniformLocation(shaderProgram, "u_time");
-    uVol =
-          gl.getUniformLocation(shaderProgram, "u_vol");
-    uDrop =
-          gl.getUniformLocation(shaderProgram, "drop");
-    uMidi =
-          gl.getUniformLocation(shaderProgram, "midi");
-     
-    gl.uniform2fv(uResolution, resolution);
-    gl.uniform1f(uTime, previousTime);
-    
-
-    gl.uniform1f(uDrop, d);
-    gl.uniform1f(uMidi, m);
-
-
-
-    // if (camera && camera.analyser) {
-    //   var bufferLength = camera.analyser.frequencyBinCount;
-    //   var dataArray = new Uint8Array(bufferLength);
-  
-    //   camera.analyser.getByteTimeDomainData(dataArray);
-    //   gl.uniform1f(uVol, getRMS(dataArray));
-    // }
-    // else{
-      gl.uniform1f(uVol, 0.0);
-    //}
-
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-
-    aVertexPosition =
-          gl.getAttribLocation(shaderProgram, "aVertexPosition");
-
-    gl.enableVertexAttribArray(aVertexPosition);
-    gl.vertexAttribPointer(aVertexPosition, vertexNumComponents,
-            gl.FLOAT, false, 0, 0);
-
-    gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
-// get teh current frame buffer
-// var frameBuffer = gl.createFramebuffer();
-// gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
-// var texture = gl.createTexture();
-// gl.bindTexture(gl.TEXTURE_2D, texture);
-// gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, null);
-// gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-// //set the texture as previous frame
-
-// uPrev =
-// gl.getUniformLocation(shaderProgram, "prev");
-
-// gl.uniform1i(uPrev, texture);
-
-    // save the current frame buffer to texture in the shade
-    window.requestAnimationFrame(function(currentTime) {
-      previousTime = previousTime + .005;
-      // TODO here check dirty bit and recompile?
-      if (isDirty) {
-        // recompile and clear dirty bit
-        shaderProgram = buildShaderProgram();
-        isDirty = false;
-      }
-      animateScene();
+    iframe.addEventListener('load', () => {
+      iframe.contentWindow.postMessage({ type: 'setup' }, '*');
     });
 
-    // console.log("time")
-    // console.log(timeSinceStuck + timeElapsedToGetHelp)
-    // console.log("cur time")
-    // console.log(Date.now())
-  
-    
-  
-}
+    const overlay = document.createElement('div');
+    overlay.style.position = 'absolute';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.cursor = 'pointer';
 
-function compileShader(type, code) {
-    let shader = gl.createShader(type);
+    container.appendChild(iframe);
+    container.appendChild(overlay);
 
-    gl.shaderSource(shader, code);
-    gl.compileShader(shader);
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'item';
+    itemDiv.setAttribute('data-toggle', 'tooltip');
+    itemDiv.setAttribute('data-html', 'true');
+    itemDiv.setAttribute('data-original-title', '<em>mathclub.html</em>');
 
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-          console.log(`Error compiling ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader:`);
-          console.log(gl.getShaderInfoLog(shader));
+    itemDiv.appendChild(container);
+    document.body.appendChild(itemDiv);
+
+    // Set initial random position
+    let x = Math.random() * (window.innerWidth - 200);
+    let y = Math.random() * (window.innerHeight - 150);
+    container.style.left = `${x}px`;
+    container.style.top = `${y}px`;
+
+    // Start animation based on current state
+    if (animationState !== 0) {
+      startAnimation(container, index);
     }
-    return shader;
-}
 
+    // Movement function
+    function move() {
+      if (activeIframe === container) return;
+      let speed = 0.05;
+      x += dir.x * (1 + index * speed);
+      y += dir.y * (1 + index * speed);
 
-function buildShaderProgram() {
-  let program = gl.createProgram();
-    
-  // Compile vertex shader
-  let shader = compileShader(gl.VERTEX_SHADER, vertexShader());
-  gl.attachShader(program, shader);
+      // Bounce off edges
+      if (x <= 0 || x >= window.innerWidth - 200) dir.x *= -1;
+      if (y <= 0 || y >= window.innerHeight - 150) dir.y *= -1;
 
-  // Compile fragment shader
-  shader = compileShader(gl.FRAGMENT_SHADER, fragmentShader());
-  gl.attachShader(program, shader);
+      container.style.left = `${x}px`;
+      container.style.top = `${y}px`;
 
-  gl.linkProgram(program)
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.log("Error linking shader program:");
-        console.log(gl.getProgramInfoLog(program));
-  }
-
-  return program;
-}
-
-function webgl_startup() {
-  glCanvas = document.getElementById("glcanvas");
-  if (glCanvas.width != glCanvas.clientWidth) {
-    glCanvas.width = glCanvas.clientWidth;
-  }
-  if (glCanvas.height != glCanvas.clientHeight) {
-    glCanvas.height = glCanvas.clientHeight;
-  }
-  gl = glCanvas.getContext("webgl");
-
-  shaderProgram = buildShaderProgram();
-
-  aspectRatio = glCanvas.width/glCanvas.height;
-  resolution = [glCanvas.width, glCanvas.height];
-
-  vertexArray = new Float32Array([
-      -1, 1,
-      1, 1,
-      1, -1,
-      -1, 1,
-      1, -1,
-     -1, -1
-  ]);
-
-  vertexBuffer = gl.createBuffer();
-  gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
-  gl.bufferData(gl.ARRAY_BUFFER, vertexArray, gl.STATIC_DRAW);
-
-  vertexNumComponents = 2;
-  vertexCount = vertexArray.length/vertexNumComponents;
-
-  animateScene();
-}
-
-
-function vertexShader() {
-  return _vertexShaderC;
-}
-
-function fragmentShader() {
-  return _fragmentShader;
-}
-
-// add a button that is overlayed over the canvas that calles sendoverwire
-
-/// add html button from javasctipt that calls sendoverwire
-// function addSendButton() {
-//   var button = document.createElement("button");
-//   button.innerHTML = "mix It Up";
-//   button.style = "position: absolute; top: 10px; right: 10px; z-index: 1000;";
-//   // onclick event with parameter
-//   button.onclick = function() {
-//     console.log("mixxxie");
-//     sendCodeOverWire("mixup");
-//   };
-//   document.body.appendChild(button);
-// }
-
-
-
-
-
-
-function sendCodeOverWire(com, code) {
-  sentCode = true;
-  hasError = false;
-  var data = {fs:code, comment:com}
-  socket.emit('livecode-update', data);
-  
-}
-
-// this returns false if the fragment shader cannot compile
-// true if it can
-function checkFragmentShader(shaderCode, lint = false) {
-  if (!gl) {
-    return ;
-  }
-  let shader = gl.createShader(gl.FRAGMENT_SHADER);
-  gl.shaderSource(shader, shaderCode);
-  gl.compileShader(shader);
-  let infoLog = gl.getShaderInfoLog(shader);
-  let result = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-  let ret = [];
-  if (!result) {
-    console.log(infoLog);
-    var errors = infoLog.split(/\r|\n/);
-    for (let error of errors){
-      var splitResult = error.split(":")
-      ret.push( {
-        message: splitResult[3] + splitResult[4],
-        character: splitResult[1],
-        line: splitResult[2]
-
-      })
+      animationFrames[index] = requestAnimationFrame(move);
     }
-  }
-  
-  if (result) {
-    console.log("did update");
-    _fragmentShader = shaderCode;
-    isDirty = true;
-  }
 
-  return ret;
-}
+    move();
 
-
-
-(function(mod) {
-  mod(CodeMirror);
-})(function(CodeMirror) {
-"use strict";
-
-function validator(text, options) {
-  var result = [];
-  var errors = checkFragmentShader(text, true);
-  if (errors) parseErrors(errors, result);
-  return result;
-}
-
-CodeMirror.registerHelper("lint", "x-shader/x-vertex", validator);
-
-function parseErrors(errors, output) {
-  for ( var i = 0; i < errors.length; i++) {
-    var error = errors[i];
-    if (error) {
-      if (Number(error.line) <= 0) {
-        console.warn("Cannot display error (invalid line " + error.line + ")", error);
-        continue;
+    // Click event to expand iframe
+    overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (activeIframe !== container) {
+        expandIframe(container);
       }
+    });
 
-      var start = error.character - 1, end = start + 1;
+    containers.push(container);
+  }
 
+  // Initially create 4 iframes
+  for (let i = 0; i < 4; i++) {
+    createIframe(i);
+  }
 
-      // Convert to format expected by validation service
-      var hint = {
-        message: error.message,
-        severity: "error",
-        from: CodeMirror.Pos(Number(error.line) - 1, start),
-        to: CodeMirror.Pos(Number(error.line) - 1, end)
-      };
+  function expandIframe(container) {
+    if (activeIframe) return;
+    activeIframe = container;
+    
+    const index = containers.indexOf(container);
+    cancelAnimationFrame(animationFrames[index]);
+    
+    container.style.position = 'fixed';
+    container.style.left = '0';
+    container.style.top = '0';
+    container.style.width = '100%';
+    container.style.height = '100%';
+    container.style.zIndex = '1000';
+    container.style.transition = transitionEnabled ? 'all 0.3s ease-in-out' : '';
+    
+    const iframe = container.querySelector('iframe');
+    const overlay = container.querySelector('div');
+    
+    setTimeout(() => {
+      iframe.style.pointerEvents = 'auto';
+      overlay.style.display = 'none';
+      
+      // Reload the iframe
+      iframe.src = iframe.src;
 
-      output.push(hint);
+      // Add event listener to capture key events from the iframe
+      window.addEventListener('message', handleIframeKeyEvents);
+    }, transitionEnabled ? 300 : 0);
+  }
+
+  function resetIframe() {
+    if (activeIframe) {
+      const index = containers.indexOf(activeIframe);
+      if (index !== -1) {
+        // Cancel the existing animation frame
+        cancelAnimationFrame(animationFrames[index]);
+        
+        activeIframe.style.position = 'absolute';
+        activeIframe.style.width = '200px';
+        activeIframe.style.height = '150px';
+        activeIframe.style.zIndex = '';
+        activeIframe.style.transition = transitionEnabled ? 'all 0.3s ease-in-out' : '';
+        
+        const iframe = activeIframe.querySelector('iframe');
+        iframe.style.pointerEvents = 'none'; // Disable pointer events again
+        iframe.contentWindow.postMessage({ type: 'reset' }, '*');
+        
+        const overlay = activeIframe.querySelector('div');
+        overlay.style.display = 'block'; // Show overlay again
+        
+        // Restart the animation
+        const dir = directions[index % directions.length];
+        let x = parseFloat(activeIframe.style.left);
+        let y = parseFloat(activeIframe.style.top);
+        
+        function move() {
+          let speed = 0.05;
+          x += dir.x * (1 + index * speed);
+          y += dir.y * (1 + index * speed);
+
+          // Bounce off edges
+          if (x <= 0 || x >= window.innerWidth - 200) dir.x *= -1;
+          if (y <= 0 || y >= window.innerHeight - 150) dir.y *= -1;
+
+          containers[index].style.left = `${x}px`;
+          containers[index].style.top = `${y}px`;
+
+          animationFrames[index] = requestAnimationFrame(move);
+        }
+
+        move();
+      }
+      
+      activeIframe = null;
+      
+      // Restart animation based on current state
+      if (animationState !== 0) {
+        startAnimation(containers[index], index);
+      }
     }
   }
+
+  // New function to handle key events from the iframe
+  function handleIframeKeyEvents(event) {
+    if (event.data.type === 'keydown') {
+      // Simulate the key event on the main document
+      const keyEvent = new KeyboardEvent('keydown', {
+        key: event.data.key,
+        keyCode: event.data.keyCode,
+        which: event.data.which,
+        bubbles: true,
+        cancelable: true
+      });
+      document.dispatchEvent(keyEvent);
+    }
+  }
+
+  // Event listener for messages from iframes
+  window.addEventListener('message', (event) => {
+    if (event.data.type === 'escape') {
+      resetIframe();
+    }
+  });
+
+  // Event listener for key presses
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      resetIframe();
+    } else if (e.key === '1') {
+      animationState = (animationState + 1) % 3;
+      updateAnimationState();
+    } else if (e.key === '2') {
+      createIframe(containers.length);
+    } else if (e.key === '3' && containers.length > 1) {
+      const lastContainer = containers.pop();
+      lastContainer.remove();
+      cancelAnimationFrame(animationFrames[containers.length]);
+    }
+  });
+
+  // Click outside to reset
+  document.addEventListener('click', (e) => {
+    if (activeIframe && !activeIframe.contains(e.target)) {
+      resetIframe();
+    }
+  });
+
+  // Add this new function to update the animation state
+  function updateAnimationState() {
+    containers.forEach((container, index) => {
+      if (container === activeIframe) return; // Skip the active (expanded) iframe
+
+      container.style.transition = animationState === 1 ? 'all 0.3s ease-in-out' : '';
+
+      if (animationState === 0) {
+        // Still
+        cancelAnimationFrame(animationFrames[index]);
+      } else {
+        // Animated (with or without ease)
+        startAnimation(container, index);
+      }
+    });
+  }
+
+  // Add this new function to start the animation for a container
+  function startAnimation(container, index) {
+    cancelAnimationFrame(animationFrames[index]); // Cancel any existing animation
+
+    if (animationState === 0) return; // Don't start animation if state is 0
+
+    const dir = directions[index % directions.length];
+    let x = parseFloat(container.style.left);
+    let y = parseFloat(container.style.top);
+
+    function move() {
+      if (animationState === 0 || container === activeIframe) {
+        cancelAnimationFrame(animationFrames[index]);
+        return;
+      }
+      let speed = 0.05;
+      x += dir.x * (1 + index * speed);
+      y += dir.y * (1 + index * speed);
+
+      // Bounce off edges
+      if (x <= 0 || x >= window.innerWidth - 200) dir.x *= -1;
+      if (y <= 0 || y >= window.innerHeight - 150) dir.y *= -1;
+
+      container.style.left = `${x}px`;
+      container.style.top = `${y}px`;
+
+      animationFrames[index] = requestAnimationFrame(move);
+    }
+
+    move();
+  }
+
+  // Call this at the end of createMovingIframes to set initial state
+  updateAnimationState();
 }
-});
+
+// Call this function when you want to create the moving iframes
+createMovingIframes();
