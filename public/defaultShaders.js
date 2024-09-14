@@ -8,6 +8,7 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_vol;
 uniform float drop;
+uniform float midi;
 #define PI 3.14159265
 #define TAU (2*PI)
 #define PHI (sqrt(5)*0.5 + 0.5)
@@ -381,7 +382,7 @@ uniform vec3 u_camPos;
 uniform float u_vol;
 uniform float drop;
 uniform sampler2D u_feed;
-
+uniform float midi;
 
  
 // main is a reserved function that is going to be called first
@@ -506,6 +507,7 @@ uniform vec2 u_resolution;
 uniform float u_time;
 uniform float u_vol;
 uniform float drop;
+uniform float midi;
 
 const float PI          = 3.14159265359;
 const float PI2         = 6.28318530718;
