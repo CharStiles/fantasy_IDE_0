@@ -368,6 +368,37 @@ vec3 dirToLook = vec3(0,1,1);
 
 `;
 
+const _fragmentShaderD = `
+
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform float u_time;
+uniform vec4 u_camRot;
+uniform vec4 u_camQuat;
+uniform vec3 u_camPos;
+uniform float u_vol;
+uniform float drop;
+uniform sampler2D u_feed;
+uniform float midi;
+
+ 
+void main(void)
+{
+  
+  vec2 v_texcoord = gl_FragCoord.xy/u_resolution;
+    vec2 fragCoord = gl_FragCoord.xy;
+    vec2 normCenterSmooth = (v_texcoord-0.5) * 2.;
+   
+    float angle = atan(normCenterSmooth.x,normCenterSmooth.y);
+  
+    gl_FragColor = vec4(0,1,0,1);
+}
+
+`;
 const _fragmentShaderB = `
 #ifdef GL_ES
 precision mediump float;

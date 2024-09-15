@@ -56,28 +56,34 @@ let m = 0;
 let currentShaderIndex = 1;
 const urlParams = new URLSearchParams(window.location.search);
 const shaderParam = urlParams.get('shader');
-const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC];
+const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD];
 
 // Set currentShaderIndex based on URL parameter or default to 2
 currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 1;
 
 // Ensure currentShaderIndex is within valid range
-currentShaderIndex = Math.max(0, Math.min(currentShaderIndex, shaders.length - 1));
+currentShaderIndex = currentShaderIndex %shaders.length ;
 
 
 let _fragmentShader = shaders[currentShaderIndex];
 
-let isExpanded = false;
+let isExpanded = false; // Initialize to false
 
 window.addEventListener('message', (event) => {
   if (event.data.type === 'setup') {
     setupEscapeHandler();
   } else if (event.data.type === 'reset') {
     isExpanded = false;
+    updateEditorVisibility();
   }
 });
 
 function setupEscapeHandler() {
+  document.addEventListener('mousedown', (e) => {
+    isExpanded = true;
+    updateEditorVisibility();
+  })
+  
   document.addEventListener('keydown', (e) => {
     console.log("Key pressed:", e.key);
     console.log("isExpanded:", isExpanded);
@@ -85,6 +91,8 @@ function setupEscapeHandler() {
     if (e.key === 'Escape') {
       console.log("Escape key pressed");
       if (isExpanded) {
+        isExpanded = false;
+        updateEditorVisibility();
         e.preventDefault();
         console.log("Escape pressed while expanded");
         window.parent.postMessage({ type: 'escape' }, '*');
@@ -95,15 +103,17 @@ function setupEscapeHandler() {
   });
 }
 
-
-
-// Make sure to call these setup functions
-// setupEscapeHandler();
-// setupSelectionHandler();
+function updateEditorVisibility() {
+  const editorElement = document.querySelector('.CodeMirror');
+  if (editorElement) {
+    editorElement.style.display = isExpanded ? 'block' : 'none';
+  }
+}
 
 // Modify your existing expand function or add this if you don't have one
 function expandIframe() {
   isExpanded = true;
+  updateEditorVisibility();
   // ... other expand logic ...
 }
 
@@ -260,7 +270,6 @@ function init() {
   });
 
   editor.on('change', onEdit);
-  setupSelectionHandler();
   onEdit();
  
   addCodeMirrorEditorModifier()
@@ -284,13 +293,20 @@ function init() {
   });
 
   setupEscapeHandler();
+  const editorElement = document.querySelector('.CodeMirror');
+  if (editorElement) {
+    editorElement.style.display = 'none';
+  }
 
+  //updateEditorVisibility(); // Hide editor initially
 }
 
 
 // this function will trigger a change to the editor
 function onEdit() {
   isExpanded = true;
+  updateEditorVisibility();
+
   const fragmentCode = editor.getValue();
   updateShader(fragmentCode);
 }
