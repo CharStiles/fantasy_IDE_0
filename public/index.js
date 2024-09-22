@@ -13,6 +13,9 @@ function createMovingIframes() {
   let animationState = 0; // 0: Still, 1: Animated with ease, 2: Animated without ease
   let isCharBotIframe = true; // Toggle for alternating between CharBot and QR code
 
+  let chatbotContainer = null; // Add this line at the top of your file
+  let webcamContainers = []; // Replace the single webcamContainer variable
+
   function createIframe(index, customUrl = null, isImage = false) {
     const dir = directions[index % directions.length];
     const container = document.createElement('div');
@@ -278,6 +281,8 @@ function createMovingIframes() {
       const lastContainer = containers.pop();
       lastContainer.remove();
       cancelAnimationFrame(animationFrames[containers.length]);
+    } else if (e.key === '7') {
+      createWebcamIframe();
     } else if (e.key === '9') {
       if (isCharBotIframe) {
         isCharBotIframe = false; // Toggle for next press
@@ -348,6 +353,94 @@ function createMovingIframes() {
   }
 
   // No need to call updateAnimationState() here since we start with 0 iframes
+
+  // Add this new function
+  function createWebcamIframe() {
+    const container = document.createElement('div');
+    container.id = `item-${containers.length}`;
+    container.style.position = 'absolute';
+    container.style.overflow = 'hidden';
+    container.style.width = '200px';
+    container.style.height = '150px';
+    container.style.borderRadius = '10px';
+    container.style.backgroundColor = '#000';
+
+    const video = document.createElement('video');
+    video.style.width = '100%';
+    video.style.height = '100%';
+    video.style.objectFit = 'cover';
+    video.autoplay = true;
+
+    container.appendChild(video);
+
+    // Add the top image
+    const topImage = document.createElement('img');
+    topImage.src = 'img/top.png';
+    topImage.style.position = 'absolute';
+    topImage.style.top = '0';
+    topImage.style.left = '0';
+    topImage.style.width = '100%';
+    topImage.style.pointerEvents = 'none';
+    container.appendChild(topImage);
+
+    const overlay = document.createElement('div');
+    overlay.style.position = 'absolute';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.cursor = 'pointer';
+
+    container.appendChild(overlay);
+
+    const itemDiv = document.createElement('div');
+    itemDiv.className = 'item';
+    itemDiv.appendChild(container);
+    document.body.appendChild(itemDiv);
+
+    // Position randomly
+    let x = Math.random() * (window.innerWidth - 200);
+    let y = Math.random() * (window.innerHeight - 150);
+    container.style.left = `${x}px`;
+    container.style.top = `${y}px`;
+
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+      })
+      .catch(err => {
+        console.error("Error accessing webcam:", err);
+        alert("Unable to access webcam. Please make sure you have granted permission.");
+      });
+
+    // Click event to expand iframe
+    overlay.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (activeIframe !== container) {
+        expandIframe(container);
+      } else {
+        // If already expanded, allow clicking into the video
+        overlay.style.display = 'none';
+      }
+    });
+
+    containers.push(container);
+    webcamContainers.push(container);
+    updateAnimationState();
+  }
+
+  // Modify the window resize event handler
+  window.addEventListener('resize', () => {
+    containers.forEach((container, index) => {
+      if (container === chatbotContainer) {
+        // Reposition chatbot to center on resize
+        container.style.left = `${(window.innerWidth - 400) / 2}px`;
+        container.style.top = `${(window.innerHeight - 450) / 2}px`;
+      } else {
+        // ... existing repositioning code for other containers ...
+      }
+    });
+  });
 }
 
 // Call this function when you want to create the moving iframes

@@ -56,7 +56,7 @@ let m = 0;
 let currentShaderIndex = 1;
 const urlParams = new URLSearchParams(window.location.search);
 const shaderParam = urlParams.get('shader');
-const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD];
+const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD, _fragmentShaderE];
 
 // Set currentShaderIndex based on URL parameter or default to 2
 currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 1;
@@ -449,12 +449,18 @@ function buildShaderProgram() {
 
 function webgl_startup() {
   glCanvas = document.getElementById("glcanvas");
-  if (glCanvas.width != glCanvas.clientWidth) {
-    glCanvas.width = glCanvas.clientWidth;
-  }
-  if (glCanvas.height != glCanvas.clientHeight) {
-    glCanvas.height = glCanvas.clientHeight;
-  }
+  
+  // Set canvas size to cover the entire viewport
+  glCanvas.width = window.innerWidth;
+  glCanvas.height = window.innerHeight;
+  
+  // Add CSS to ensure the canvas covers the entire screen
+  glCanvas.style.position = 'fixed';
+  glCanvas.style.top = '0';
+  glCanvas.style.left = '0';
+  glCanvas.style.width = '100%';
+  glCanvas.style.height = '100%';
+
   gl = glCanvas.getContext("webgl");
 
   shaderProgram = buildShaderProgram();
@@ -481,6 +487,16 @@ function webgl_startup() {
   animateScene();
 }
 
+// Add a window resize event listener to adjust canvas size when the window is resized
+window.addEventListener('resize', function() {
+  if (glCanvas) {
+    glCanvas.width = window.innerWidth;
+    glCanvas.height = window.innerHeight;
+    gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+    aspectRatio = glCanvas.width/glCanvas.height;
+    resolution = [glCanvas.width, glCanvas.height];
+  }
+});
 
 function vertexShader() {
   return _vertexShaderC;

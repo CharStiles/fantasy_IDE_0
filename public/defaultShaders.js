@@ -400,6 +400,7 @@ void main(void)
 
 `;
 const _fragmentShaderB = `
+
 #ifdef GL_ES
 precision mediump float;
 #endif
@@ -517,13 +518,343 @@ void main(void)
     
     vec4 symbol = vec4(lissajous(p,gray*2.,mod(gray*8. , 10.)/2. , mod(gray*8., 6.) ));
     vec4 ret = mix(symbol,pcol,drop);
+  ret = clamp(ret,vec4(0),vec4(1));
+    ret = mix(vec4(0,1,0,1),ret,ret);
     ret.a = 1.;
-    gl_FragColor = mix(ret,vec4(0),
-    clamp(  (v_texcoord.x*8.)-7.,0.,1. 
-         )
-   );
+    gl_FragColor =ret;
+   
 }
+
 `;
+
+const _fragmentShaderE = `
+
+
+
+
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform float u_time;
+uniform float u_vol;
+uniform float drop;
+uniform float midi;
+
+const float PI          = 3.14159265359;
+const float PI2         = 6.28318530718;
+const float MAX_DIST    = 100.;
+const float MIN_DIST    = .001;
+float rand(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+
+float hash21(vec2 p) 
+{  
+    return fract(sin(dot(p, vec2(27.609, 57.583)))*43758.5453); 
+}
+mat2 rot(float a)
+{
+    return mat2(cos(a),sin(a),-sin(a),cos(a));
+}
+
+float box( vec3 p, vec3 b ){
+    vec3 q = abs(p) - b;
+    return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float torus( vec3 p, vec2 t )
+{
+    vec2 q = vec2(length(p.xy)-t.x,p.z);
+    return length(q)-t.y;
+}
+
+vec3 hp,hitPoint;
+mat2 rt;
+
+vec2 map(vec3 p)
+{
+  float time = u_time* mix(1.,4.,drop);
+    vec2 res = vec2(1e5,0.);
+    vec3 q = p+vec3(0,0,1);
+    vec3 q3=q;
+    
+    float bf = box(q3,vec3(55., 35.0, 25.));
+    float cx = box(q3,vec3(8.35,5.25, 60.));
+    bf = max(bf,-cx );
+    
+    if(bf<res.x) {
+        res = vec2(bf,1.);
+        hp=q3;
+    }
+    
+    //spheres
+    float qd = floor((q3.z+1.5)/3.);
+    q3.z=mod(q3.z+1.5,3.)-1.5;
+    
+    float rdx = .65+.2*sin(qd+time*1.25);
+    float ddx = (rdx*2.)-1.;
+    float b = length(q3-vec3(0,(rdx*.5)+ddx,0))-rdx;
+    if(b<res.x) {
+        res = vec2(b,2.);
+        hp=q;
+    }
+    //boxes
+    vec3 qr = q-vec3(rdx,ddx,0);
+    float id = floor((qr.z+1.5)/3.);
+    qr.xy*=rot(time*.3+id*.1);
+   
+    qr.z=mod(qr.z+1.5,3.)-1.5;
+    qr.zx*=rot(time*.5+id*.2);
+     
+    float bx = box(qr,vec3(.5,.5,.5));
+    if(bx<res.x) {
+        res = vec2(bx,2.);
+        hp=q;
+    }
+    //rings
+    vec3 nq = q;
+    float nd = floor((nq.z+1.5)/3.);
+    nq.z=mod(nq.z+1.5,3.)-1.5;
+    mat2 rota =rot(time*.3+ddx);
+    mat2 rotb =rot(time*.2+nd*.5);
+    
+    nq.yz*=rota;
+    nq.xz*=rotb;
+    float tr = torus(nq,vec2(.95 ,.15));
+    nq.yz*=rota;
+    nq.xz*=rotb;
+    tr = min(tr, torus(nq,vec2(.45 ,.15)) );
+    if(tr<res.x) {
+        res = vec2(tr,2.);
+        hp=q;
+    }
+    float f = p.y+(sin(q.x) + cos(q.z))*0.2+2.5;
+    if(f<res.x) {
+        res = vec2(f,1.);
+        hp=p;
+    }
+    
+    
+    res = mix(vec2(tr,2.),vec2(bx,2.),(sin(time)+1.0)/2.);
+    //res = mix(res, vec2(b,2.), sin(time));
+    
+   
+
+
+    return res + rand(q.xz)*0.001;
+}
+
+vec3 normal(vec3 p, float t)
+{
+    t*=MIN_DIST;
+    float d = map(p).x;
+    
+    vec2 e = vec2(t,0);
+    vec3 n = d - vec3(
+        map(p-e.xyy).x,
+        map(p-e.yxy).x,
+        map(p-e.yyx).x
+        );
+    return normalize(n);
+}
+
+const vec3 c = vec3(0.959,0.970,0.989),
+           d = vec3(0.651,0.376,0.984);
+           
+vec3 hue(float t){ 
+    return .5 + .45*cos(13.+PI2*t*(c*d) ); 
+}
+
+const float goldenRatioConjugate = 0.61803398875;
+const int starCount = 150;
+
+float hash(float n) { return fract(sin(n) * 43758.5453123); }
+
+vec2 fibonacciPoint(int index, float goldenRatio) {
+    float theta = mod(float(index) * goldenRatioConjugate, 1.0) * 6.28318530718;
+    float r = sqrt(float(index)) / sqrt(float(starCount));
+    return vec2(r * cos(theta), r * sin(theta));
+}
+
+float gentleGlow(float distance, float intensity) {
+    return 0.5 + 0.5 * sin(6.0 * distance + intensity - u_time * 1.5);
+}
+
+vec2 gravitationalLens(vec2 coord, vec2 lensCenter, float lensStrength) {
+    vec2 offset = coord - lensCenter;
+    float d = length(offset);
+    return coord + (offset / (d + 0.2)) * lensStrength / (d * d + 0.01);
+}
+
+float noise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f*f*(3.0-2.0*f);
+    float n = dot(i, vec2(127.1, 311.7));
+    return mix(mix(hash(n + 0.0), hash(n + 1.0), f.x),
+               mix(hash(n + 57.0), hash(n + 58.0), f.x), f.y);
+}
+
+vec3 iridescentColors(float angle, float distance, float alpha) {
+    return vec3(0.5 + 0.5 * sin(6.0 * angle + distance * 3.0 + u_time * 2.0 + alpha),
+                0.5 + 0.5 * sin(6.0 * angle + distance * 3.0 + u_time * 2.5 + alpha),
+                0.5 + 0.5 * sin(6.0 * angle + distance * 3.0 + u_time * 3.0 + alpha));
+}
+
+// Function to generate flickering effect inspired by angel's wing beat
+float wingFlicker(float dist, float intensity) {
+    float flicker = sin(u_time * 3.0 + dist * 10.0) * cos(u_time * 2.0 + dist * 5.0);
+    return 0.5 + 0.5 * sin((6.0 * dist + intensity) * (0.5 + 0.5 * flicker));
+}
+
+vec4 irri(vec4 col, vec3 rd) {
+    float time = u_time;
+     vec2 uv = gl_FragCoord.xy/u_resolution;
+    float height = u_resolution.y;
+  float width = u_resolution.x;
+    vec2 fragCoord = vec2((uv.x - 0.5) * max(width / height, 1.0) + 0.5, (uv.y - 0.5) * max(height / width, 1.0) + 0.5);
+    vec3 baseColor =rd.yzz;// mix(vec3(0.1, 0.0, 0.2), vec3(0.0, 0.05, 0.3), fragCoord.y);
+    vec3 color = col.xyz;
+    vec2 lensCenter = vec2(0.5, 0.5);
+    vec2 lensCoord = gravitationalLens(fragCoord, lensCenter, 0.05);
+
+    for (int i = 0; i < starCount; ++i) {
+        vec2 point = rd.yx + col.xy;//lensCenter + fibonacciPoint(i, goldenRatioConjugate);
+        float dist = distance(lensCoord, point);
+        float glowIntensity = wingFlicker(dist, hash(float(i)));
+        float star = smoothstep(0.01, 0.2, (dist * 15.0*col.y + hash(float(i)) * 6.0) * 0.5 + 0.5) * glowIntensity;
+        vec3 starColor = vec3(1.0, 0.9, 0.8) * glowIntensity;
+        vec3 dynamicColor = mix(starColor, vec3(0.8, 0.2, 0.9), (sin(time * 0.5 + float(i)) + 1.0) / 2.0);
+        color = mix(color, dynamicColor, star);
+    }
+
+    float angle = atan(lensCoord.y - lensCenter.y, lensCoord.x - lensCenter.x);
+    float radius = length(lensCoord - lensCenter);
+    float radialSymmetry = rd.x;//cos(6.0 * angle + radius * 6.0 + time * 0.6) * 0.5 + 0.5;
+    color = mix(color, vec3(0.3, 0.6, 0.9), radialSymmetry * 0.3);
+
+    float radialGlow = 1.0 - smoothstep(0.1, 0.5, radius);
+    vec3 glowColor = mix(vec3(0.9, 0.3, 0.7), vec3(0.1, 0.7, 0.9), sin(time + radius) * 0.5 + 0.5);
+    color += glowColor * 0.2;
+
+    vec3 cosmicRayColor = vec3(1.0, 0.9, 0.6) * smoothstep(0.0, 0.008, fract(time) - abs(fragCoord.x - 0.5) * 0.0005);
+    color = mix(color, cosmicRayColor, 0.1);
+
+    vec3 supernovaColor = vec3(1.0, 0.5, 0.2) * smoothstep(0.0, 0.3, col.x);
+    color = mix(color, supernovaColor, 0.05);
+    
+    vec3 iridescentColor = iridescentColors(angle, radius, 0.5);
+    color = mix(color, iridescentColor, 0.4 *col.x );
+
+    vec3 mistColor = mix(vec3(0.5, 0.7, 0.9), vec3(0.8, 0.6, 0.9), noise(fragCoord * 3.0 + time * 0.1));
+    color = mix(color, mistColor, 0.3 * smoothstep(0.4, 0.6, fract(time * 0.1 + noise(fragCoord * 5.0))));
+
+    return vec4(color,1.0);
+}
+
+
+void main(void )
+{
+      vec2 normCoord = gl_FragCoord.xy/u_resolution;
+    
+    float time = u_time/5.0; //slow down time
+
+    rt = rot(time*.5);
+    vec3 C = vec3(0),
+         FC = vec3(0.800,0.792,0.659);
+
+    vec2 uv = (2.*gl_FragCoord.xy-u_resolution.xy)/max(u_resolution.x,u_resolution.y);
+    
+    vec3 ro = vec3(0,0,4.25),
+         rd = normalize(vec3(uv,-1));
+
+    float x = 0.;1. + sin(time*0.5)*0.421;
+    float y = 0.;tan(time*0.5)*0.421;
+    
+    
+    mat2 rx = rot(y);
+    mat2 ry = rot(x);
+    
+    ro.zy*=rx;ro.xz*=ry;
+    rd.zy*=rx;rd.xz*=ry;
+    
+    float d = 0.01, m = 0.;
+    float bnc = 0.;
+    vec3 p = ro + rd;
+    
+    for(int i=0;i<64;i++)
+    {
+        vec2 ray = map(p);
+        d += ray.x;
+        m = ray.y;
+        p += rd * ray.x * .76;
+        if(d>MAX_DIST)break;
+        
+        if(abs(ray.x)< .0005)
+        {
+            if(m ==2. && bnc<4.)
+            {
+                bnc+=1.;
+                rd = reflect(rd,normal(p,d));
+                p +=rd*.001;
+            } 
+        }
+    }
+    
+    hitPoint=hp;
+    // draw on screen
+    if(d<MAX_DIST)
+    {
+        vec3 n = normal(p,d);
+ 
+        vec4 h = vec4(.5);
+        if(m==1.)
+        {
+            hitPoint.z-=time*1.5;
+            hitPoint*=.45;
+            vec3 id=floor(hitPoint)-.5;
+            vec3 f= fract(hitPoint)-.5;
+            vec3 clr = hue(hash21(id.xz)*.2);
+            h = vec4(0,0,0,1);
+        
+        }
+        if(m==3.) h.rgb=hue(49.);
+        
+        vec3 lpos = vec3(3.*sin(time*.4),10,5);
+        vec3 l = normalize(lpos-p);
+ 
+        // shading and shadow
+        float diff = clamp(dot(n,l),0.,1.);
+        float shadow = 0.;
+        for(int i=0;i<8;i++)
+        {
+            vec3 q = (p + n * .2) + l * shadow;
+            float h = map(q).x;
+            if(h<MIN_DIST*d||shadow>MAX_DIST)break;
+            shadow += h;
+        }
+        
+        if(shadow < length(p -  lpos)) diff *= .1;
+
+        //specular 
+        vec3 view = normalize(p - ro);
+        vec3 ref = reflect(normalize(lpos), n);
+        float spec =  0.85 * pow(max(dot(view, ref), 0.), h.w);
+
+        C += mix(h.rgb,l,drop) * diff + spec ;
+
+  
+    }
+ 
+    vec4 ret = vec4(pow(C, vec3(01.9)),0.8);
+      vec4 col = irri(ret, rd);
+    gl_FragColor = col;
+}
+
+`
 
 
 const _fragmentShaderA = `
