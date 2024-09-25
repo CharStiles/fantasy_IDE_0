@@ -1,0 +1,1 @@
+its a node app then i made so that you can make different windows appear if you press 2, pressing 1 changes the speed of the windows, 3 delete the windows, 9 adds charbot chatbot, pressing 9 again adds QR code for that pressing 8 i think brings in webcam window
