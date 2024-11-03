@@ -329,6 +329,9 @@ window.onload = (event) => {
 
 }
 
+let lastCaptureTime = 0;
+const CAPTURE_INTERVAL = 1000; // Capture every 1000ms
+
 function animateScene() {
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
     // This sets background color
@@ -351,22 +354,9 @@ function animateScene() {
     gl.uniform2fv(uResolution, resolution);
     gl.uniform1f(uTime, previousTime);
     
-
     gl.uniform1f(uDrop, d);
     gl.uniform1f(uMidi, m);
-
-
-
-    // if (camera && camera.analyser) {
-    //   var bufferLength = camera.analyser.frequencyBinCount;
-    //   var dataArray = new Uint8Array(bufferLength);
-  
-    //   camera.analyser.getByteTimeDomainData(dataArray);
-    //   gl.uniform1f(uVol, getRMS(dataArray));
-    // }
-    //else{
-      gl.uniform1f(uVol, 0.0);
-    //}
+    gl.uniform1f(uVol, 0.0);
 
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 
@@ -377,22 +367,39 @@ function animateScene() {
     gl.vertexAttribPointer(aVertexPosition, vertexNumComponents,
             gl.FLOAT, false, 0, 0);
 
+    // Bind framebuffer and previous frame texture
+    gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, currentFrameTexture, 0);
+
+    // Add uniform for previous frame
+    const uPrevFrame = gl.getUniformLocation(shaderProgram, "u_prevFrame");
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, prevFrameTexture);
+    gl.uniform1i(uPrevFrame, 0);
+
+    const currentTime = performance.now();
+    if (currentTime - lastCaptureTime > CAPTURE_INTERVAL) {
+        updateWindowTexture();
+        lastCaptureTime = currentTime;
+    }
+
+    const uWindow = gl.getUniformLocation(shaderProgram, "u_window");
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, windowTexture);
+    gl.uniform1i(uWindow, 1);
+
+    // Draw to framebuffer
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
-// get teh current frame buffer
-// var frameBuffer = gl.createFramebuffer();
-// gl.bindFramebuffer(gl.FRAMEBUFFER, frameBuffer);
-// var texture = gl.createTexture();
-// gl.bindTexture(gl.TEXTURE_2D, texture);
-// gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, null);
-// gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
-// //set the texture as previous frame
 
-// uPrev =
-// gl.getUniformLocation(shaderProgram, "prev");
+    // Copy framebuffer to screen
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 
-// gl.uniform1i(uPrev, texture);
+    // Swap textures for next frame
+    const temp = prevFrameTexture;
+    prevFrameTexture = currentFrameTexture;
+    currentFrameTexture = temp;
 
-    // save the current frame buffer to texture in the shade
     window.requestAnimationFrame(function(currentTime) {
       previousTime = previousTime + .005;
       // TODO here check dirty bit and recompile?
@@ -403,14 +410,6 @@ function animateScene() {
       }
       animateScene();
     });
-
-    // console.log("time")
-    // console.log(timeSinceStuck + timeElapsedToGetHelp)
-    // console.log("cur time")
-    // console.log(Date.now())
-  
-    
-  
 }
 
 function compileShader(type, code) {
@@ -484,7 +483,53 @@ function webgl_startup() {
   vertexNumComponents = 2;
   vertexCount = vertexArray.length/vertexNumComponents;
 
+  // Setup two textures and framebuffer
+  frameBuffer = gl.createFramebuffer();
+  
+  // Create and set up both textures
+  prevFrameTexture = createTexture();
+  currentFrameTexture = createTexture();
+  
+  // Helper function to create and setup a texture
+  function createTexture() {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    return texture;
+  }
+
+  // Create canvas for window capture
+  windowCanvas = document.createElement('canvas');
+  windowCanvas.width = window.innerWidth;
+  windowCanvas.height = window.innerHeight;
+  windowContext = windowCanvas.getContext('2d');
+
+  // Create and setup window texture
+  windowTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, windowTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
   animateScene();
+}
+
+async function updateWindowTexture() {
+  try {
+    const canvas = await html2canvas(document.documentElement, {
+      backgroundColor: null,
+      logging: false,
+      useCORS: true
+    });
+    
+    gl.bindTexture(gl.TEXTURE_2D, windowTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+  } catch (error) {
+    console.error('Failed to capture element:', error);
+  }
 }
 
 // Add a window resize event listener to adjust canvas size when the window is resized
@@ -492,9 +537,18 @@ window.addEventListener('resize', function() {
   if (glCanvas) {
     glCanvas.width = window.innerWidth;
     glCanvas.height = window.innerHeight;
+    
+    // Resize the previous frame texture
+    gl.bindTexture(gl.TEXTURE_2D, prevFrameTexture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
     aspectRatio = glCanvas.width/glCanvas.height;
     resolution = [glCanvas.width, glCanvas.height];
+    
+    // Update window capture canvas size
+    windowCanvas.width = window.innerWidth;
+    windowCanvas.height = window.innerHeight;
   }
 });
 

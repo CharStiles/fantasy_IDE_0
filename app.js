@@ -126,7 +126,7 @@ io.on("connection", function(socket) {
     }
       else{
         console.log("CHANGE");
-        _code = await sendMessage("//just send back code in glsl any non-code must be commented like this \n"+code.fs);;
+        _code = await sendMessage("can you pretend you are speaking as the code here and I can have a conversation with the code. Just immideiately respond as the code no intro needed. just respond as the code\n"+code.fs);;
 
     }
     //if(code.who == process.env.EDITOR){

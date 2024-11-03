@@ -13,7 +13,7 @@ const openai = new OpenAIApi(new Configuration({
 async function sendMessage(message) {
 
 	const response = await openai.createChatCompletion({
-		model: "gpt-3.5-turbo-0301",
+		model: "gpt-4",
 		messages:[{ role: 'user', content: message }],
 		temperature: 1.4,
 		max_tokens: 1900,

@@ -861,6 +861,11 @@ const _fragmentShaderA = `
 
 
 
+
+
+
+
+
 #ifdef GL_ES
 precision mediump float;
 #endif
@@ -870,6 +875,9 @@ uniform float u_time;
 uniform float u_vol;
 uniform float drop;
 uniform float midi;
+uniform sampler2D u_prevFrame;
+uniform sampler2D u_window;
+
 
 const float PI          = 3.14159265359;
 const float PI2         = 6.28318530718;
@@ -1091,12 +1099,38 @@ void main(void )
     }
  
     vec4 ret = vec4(pow(C, vec3(01.9)),0.8);
-      
-    gl_FragColor = mix(ret,vec4(0),
-                       clamp(  (normCoord.x*8.)-7.,0.,1. 
-                            )
-                      );
+  // In your fragment shader:
+vec2 windowCoord = gl_FragCoord.xy / u_resolution;
+windowCoord.y = 1.0 - windowCoord.y;  // Flip Y coordinate
+vec4 windowColor = texture2D(u_window, windowCoord);
+  
+      vec4 previousColor = texture2D(u_prevFrame, 1.001*gl_FragCoord.xy / u_resolution);
+    gl_FragColor = mix(windowColor,previousColor,
+                      1.-ret);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
