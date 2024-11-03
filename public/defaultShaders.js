@@ -1110,29 +1110,296 @@ vec4 windowColor = texture2D(u_window, windowCoord);
 }
 
 
+`
+
+
+
+const _fragmentShaderG=`
 
 
 
 
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform float u_time;
+uniform vec4 u_camRot;
+uniform vec4 u_camQuat;
+uniform vec3 u_camPos;
+uniform float u_vol;
+uniform float drop;
+uniform sampler2D u_feed;
+uniform float midi;
+uniform sampler2D u_mouseTrail;
+
+uniform sampler2D u_prevFrames[15];
+
+uniform sampler2D u_prevFrame;
+uniform sampler2D u_window;
 
 
+const float PI          = 3.14159265359;
+const float PI2         = 6.28318530718;
+const float MAX_DIST    = 100.;
+const float MIN_DIST    = .001;
+float rand(vec2 co){
+    return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+}
 
 
+float hash21(vec2 p) 
+{  
+    return fract(sin(dot(p, vec2(27.609, 57.583)))*43758.5453); 
+}
+mat2 rot(float a)
+{
+    return mat2(cos(a),sin(a),-sin(a),cos(a));
+}
+
+float box( vec3 p, vec3 b ){
+    vec3 q = abs(p) - b;
+    return length(max(q,0.0)) + min(max(q.x,max(q.y,q.z)),0.0);
+}
+
+float torus( vec3 p, vec2 t )
+{
+    vec2 q = vec2(length(p.xy)-t.x,p.z);
+    return length(q)-t.y;
+}
+
+vec3 hp,hitPoint;
+mat2 rt;
+
+vec2 map(vec3 p)
+{
+  float time = u_time* mix(1.,4.,drop);
+    vec2 res = vec2(1e5,0.);
+    vec3 q = p+vec3(0,0,1);
+    vec3 q3=q;
+    
+    float bf = box(q3,vec3(55., 35.0, 25.));
+    float cx = box(q3,vec3(8.35,5.25, 60.));
+    bf = max(bf,-cx );
+    
+    if(bf<res.x) {
+        res = vec2(bf,1.);
+        hp=q3;
+    }
+    
+    //spheres
+    float qd = floor((q3.z+1.5)/3.);
+    q3.z=mod(q3.z+1.5,3.)-1.5;
+    
+    float rdx = .65+.2*sin(qd+time*1.25);
+    float ddx = (rdx*2.)-1.;
+    float b = length(q3-vec3(0,(rdx*.5)+ddx,0))-rdx;
+    if(b<res.x) {
+        res = vec2(b,2.);
+        hp=q;
+    }
+    //boxes
+    vec3 qr = q-vec3(rdx,ddx,0);
+    float id = floor((qr.z+1.5)/3.);
+    qr.xy*=rot(time*.3+id*.1);
+   
+    qr.z=mod(qr.z+1.5,3.)-1.5;
+    qr.zx*=rot(time*.5+id*.2);
+     
+    float bx = box(qr,vec3(.5,.5,.5));
+    if(bx<res.x) {
+        res = vec2(bx,2.);
+        hp=q;
+    }
+    //rings
+    vec3 nq = q;
+    float nd = floor((nq.z+1.5)/3.);
+    nq.z=mod(nq.z+1.5,3.)-1.5;
+    mat2 rota =rot(time*.3+ddx);
+    mat2 rotb =rot(time*.2+nd*.5);
+    
+    nq.yz*=rota;
+    nq.xz*=rotb;
+    float tr = torus(nq,vec2(.95 ,.15));
+    nq.yz*=rota;
+    nq.xz*=rotb;
+    tr = min(tr, torus(nq,vec2(.45 ,.15)) );
+    if(tr<res.x) {
+        res = vec2(tr,2.);
+        hp=q;
+    }
+    float f = p.y+(sin(q.x) + cos(q.z))*0.2+2.5;
+    if(f<res.x) {
+        res = vec2(f,1.);
+        hp=p;
+    }
+    
+    
+    res = mix(vec2(tr,2.),vec2(bx,2.),(sin(time)+1.0)/2.);
+    //res = mix(res, vec2(b,2.), sin(time));
+    
+   
 
 
+    return res + rand(q.xz)*0.001;
+}
+
+vec3 normal(vec3 p, float t)
+{
+    t*=MIN_DIST;
+    float d = map(p).x;
+    
+    vec2 e = vec2(t,0);
+    vec3 n = d - vec3(
+        map(p-e.xyy).x,
+        map(p-e.yxy).x,
+        map(p-e.yyx).x
+        );
+    return normalize(n);
+}
+
+const vec3 c = vec3(0.959,0.970,0.989),
+           d = vec3(0.651,0.376,0.984);
+           
+vec3 hue(float t){ 
+    return .5 + .45*cos(13.+PI2*t*(c*d) ); 
+}
+
+vec4 m( )
+{
+      vec2 normCoord = gl_FragCoord.xy/u_resolution;
+    
+    float time = u_time/5.0; //slow down time
+
+    rt = rot(time*.5);
+    vec3 C = vec3(0),
+         FC = vec3(0.800,0.792,0.659);
+
+    vec2 uv = (2.*gl_FragCoord.xy-u_resolution.xy)/max(u_resolution.x,u_resolution.y);
+    
+    vec3 ro = vec3(0,0,4.25),
+         rd = normalize(vec3(uv,-1));
+
+    float x = 0.;1. + sin(time*0.5)*0.421;
+    float y = 0.;tan(time*0.5)*0.421;
+    
+    
+    mat2 rx = rot(y);
+    mat2 ry = rot(x);
+    
+    ro.zy*=rx;ro.xz*=ry;
+    rd.zy*=rx;rd.xz*=ry;
+    
+    float d = 0.01, m = 0.;
+    float bnc = 0.;
+    vec3 p = ro + rd;
+    
+    for(int i=0;i<64;i++)
+    {
+        vec2 ray = map(p);
+        d += ray.x;
+        m = ray.y;
+        p += rd * ray.x * .76;
+        if(d>MAX_DIST)break;
+        
+        if(abs(ray.x)< .0005)
+        {
+            if(m ==2. && bnc<4.)
+            {
+                bnc+=1.;
+                rd = reflect(rd,normal(p,d));
+                p +=rd*.001;
+            } 
+        }
+    }
+    
+    hitPoint=hp;
+    // draw on screen
+    if(d<MAX_DIST)
+    {
+        vec3 n = normal(p,d);
+ 
+        vec4 h = vec4(.5);
+        if(m==1.)
+        {
+            hitPoint.z-=time*1.5;
+            hitPoint*=.45;
+            vec3 id=floor(hitPoint)-.5;
+            vec3 f= fract(hitPoint)-.5;
+            vec3 clr = hue(hash21(id.xz)*.2);
+            h = vec4(0,0,0,1);
+        
+        }
+        if(m==3.) h.rgb=hue(49.);
+        
+        vec3 lpos = vec3(3.*sin(time*.4),10,5);
+        vec3 l = normalize(lpos-p);
+ 
+        // shading and shadow
+        float diff = clamp(dot(n,l),0.,1.);
+        float shadow = 0.;
+        for(int i=0;i<8;i++)
+        {
+            vec3 q = (p + n * .2) + l * shadow;
+            float h = map(q).x;
+            if(h<MIN_DIST*d||shadow>MAX_DIST)break;
+            shadow += h;
+        }
+        
+        if(shadow < length(p -  lpos)) diff *= .1;
+
+        //specular 
+        vec3 view = normalize(p - ro);
+        vec3 ref = reflect(normalize(lpos), n);
+        float spec =  0.85 * pow(max(dot(view, ref), 0.), h.w);
+
+        C += mix(h.rgb,l,drop) * diff + spec ;
+
+  
+    }
+ 
+    vec4 ret = vec4(pow(C, vec3(01.9)),0.8);
+  // In your fragment shader:
+vec2 windowCoord = gl_FragCoord.xy / u_resolution;
+windowCoord.y = 1.0 - windowCoord.y;  // Flip Y coordinate
+vec4 windowColor = texture2D(u_window, windowCoord);
+  
+      vec4 previousColor = texture2D(u_prevFrame, 1.001*gl_FragCoord.xy / u_resolution);
+    return ret;
+}
 
 
+// Example usage in your shader:
+void main() {
+  
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+    float r = sin(length(uv)+u_time);
+    float g = sin(length(uv*8.)+u_time);
+  float b = cos(length(uv + atan(uv.y,uv.x)*8.)+u_time);
+    
+// In your shader:
+vec4 mouseTrail = texture2D(u_mouseTrail, gl_FragCoord.xy / u_resolution);
+float trailIntensity = mouseTrail.r;  // U
 
-
-
-
-
-
-
-
-
-
-
+  vec4 col = vec4(r,g,b,1);
+  // Access individual frames from history
+    vec4 frame0 = texture2D(u_prevFrames[0], uv);  // oldest frame
+    vec4 frame14 = texture2D(u_prevFrames[14], uv); // newest frame
+    
+    // Example: Create a trail effect using multiple frames
+    vec4 sum = vec4(0.0);
+    for(int i = 0; i < 15; i++) {
+      	float bias = 1.-((float(i) / 15.0)-(trailIntensity*1.52));
+        vec4 s = texture2D(u_prevFrames[i], uv) ;
+      	sum = mix(sum,s, bias);
+    }
+    
+    vec4 s = sum;// / 15.0;
+    gl_FragColor =mix(m(),sum, mouseTrail);
+   
+}
 
 
 
@@ -1140,6 +1407,63 @@ vec4 windowColor = texture2D(u_window, windowCoord);
 
 
 `
+
+
+
+
+
+
+
+const _fragmentShaderF = 
+
+`
+
+#ifdef GL_ES
+precision mediump float;
+#endif
+
+uniform vec2 u_resolution;
+uniform vec2 u_mouse;
+uniform float u_time;
+uniform vec4 u_camRot;
+uniform vec4 u_camQuat;
+uniform vec3 u_camPos;
+uniform float u_vol;
+uniform float drop;
+uniform sampler2D u_feed;
+uniform float midi;
+uniform sampler2D u_mouseTrail;
+
+void main(void)
+{
+  
+// In your shader:
+vec4 mouseTrail = texture2D(u_mouseTrail, gl_FragCoord.xy / u_resolution);
+float trailIntensity = mouseTrail.r;  // U
+    gl_FragColor =mouseTrail;
+   
+}
+
+`
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 const _vertexShaderC = `
 attribute vec2 aVertexPosition;

@@ -56,10 +56,10 @@ let m = 0;
 let currentShaderIndex = 1;
 const urlParams = new URLSearchParams(window.location.search);
 const shaderParam = urlParams.get('shader');
-const shaders = [_fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD, _fragmentShaderE];
+const shaders = [_fragmentShaderG,_fragmentShaderF, _fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD, _fragmentShaderE];
 
 // Set currentShaderIndex based on URL parameter or default to 2
-currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 1;
+currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 0;
 
 // Ensure currentShaderIndex is within valid range
 currentShaderIndex = currentShaderIndex %shaders.length ;
@@ -329,14 +329,57 @@ window.onload = (event) => {
 
 }
 
+// Add these variables at the top with other state storage
+const FRAME_HISTORY_SIZE = 15;
+const FRAME_CAPTURE_INTERVAL = 1000; // 10 seconds in milliseconds
+let frameHistoryTextures = [];
+let lastFrameCapture = 0;
+let historyIndex = 0; // Track where we are in the history array
+
 let lastCaptureTime = 0;
 const CAPTURE_INTERVAL = 1000; // Capture every 1000ms
 
+let mouseTrailTexture1;
+let mouseTrailTexture2;
+let currentMouseTrailTexture;
+let prevMouseTrailTexture;
+let mouseTrailFramebuffer;
+let mouseTrailProgram;
+let mousePos = [0, 0];
+let lastMousePos = [0, 0];
+
+
+
+// Add mouse move listener
+document.addEventListener('mousemove', (e) => {
+    mousePos = [
+        e.clientX / window.innerWidth,
+        1.0 - (e.clientY / window.innerHeight)  // Flip Y for WebGL coords
+    ];
+});
+
 function animateScene() {
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
-    // This sets background color
     gl.clearColor(1, 1, 1, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+
+    // First, render mouse trail
+    gl.useProgram(mouseTrailProgram);
+    
+    // Set uniforms for mouse trail shader
+    gl.uniform2fv(gl.getUniformLocation(mouseTrailProgram, "u_resolution"), resolution);
+    gl.uniform2fv(gl.getUniformLocation(mouseTrailProgram, "u_mouse"), mousePos);
+    gl.uniform2fv(gl.getUniformLocation(mouseTrailProgram, "u_lastMouse"), lastMousePos);
+    
+    // Bind previous trail texture
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, prevMouseTrailTexture);
+    gl.uniform1i(gl.getUniformLocation(mouseTrailProgram, "u_prevTrail"), 2);
+    
+    // Render to current mouse trail texture
+    gl.bindFramebuffer(gl.FRAMEBUFFER, mouseTrailFramebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, currentMouseTrailTexture, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 
     gl.useProgram(shaderProgram);
 
@@ -358,6 +401,12 @@ function animateScene() {
     gl.uniform1f(uMidi, m);
     gl.uniform1f(uVol, 0.0);
 
+    // Add mouse trail texture uniform
+    const uMouseTrail = gl.getUniformLocation(shaderProgram, "u_mouseTrail");
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, currentMouseTrailTexture);
+    gl.uniform1i(uMouseTrail, 3);
+
     gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
 
     aVertexPosition =
@@ -376,8 +425,29 @@ function animateScene() {
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, prevFrameTexture);
     gl.uniform1i(uPrevFrame, 0);
-
     const currentTime = performance.now();
+    if (currentTime - lastFrameCapture > FRAME_CAPTURE_INTERVAL) {
+        // Capture current frame to the next position in history
+        gl.bindTexture(gl.TEXTURE_2D, frameHistoryTextures[historyIndex]);
+        gl.copyTexImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 0, 0, glCanvas.width, glCanvas.height, 0);
+        
+        // Update index and wrap around if needed
+        historyIndex = (historyIndex + 1) % FRAME_HISTORY_SIZE;
+        lastFrameCapture = currentTime;
+    }
+
+    // Bind all history textures in chronological order
+    for (let i = 0; i < FRAME_HISTORY_SIZE; i++) {
+        // Calculate the actual index in the history array
+        // This ensures oldest frame is at index 0 in the shader
+        const textureIndex = (historyIndex - FRAME_HISTORY_SIZE + i + FRAME_HISTORY_SIZE) % FRAME_HISTORY_SIZE;
+        
+        gl.activeTexture(gl.TEXTURE4 + i);
+        gl.bindTexture(gl.TEXTURE_2D, frameHistoryTextures[textureIndex]);
+        gl.uniform1i(gl.getUniformLocation(shaderProgram, `u_prevFrames[${i}]`), 4 + i);
+    }
+
+    //const currentTime = performance.now();
     if (currentTime - lastCaptureTime > CAPTURE_INTERVAL) {
         updateWindowTexture();
         lastCaptureTime = currentTime;
@@ -395,20 +465,25 @@ function animateScene() {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
 
-    // Swap textures for next frame
-    const temp = prevFrameTexture;
+    // At the end of the frame, swap both sets of textures
+    const tempFrame = prevFrameTexture;
     prevFrameTexture = currentFrameTexture;
-    currentFrameTexture = temp;
+    currentFrameTexture = tempFrame;
+
+    const tempTrail = prevMouseTrailTexture;
+    prevMouseTrailTexture = currentMouseTrailTexture;
+    currentMouseTrailTexture = tempTrail;
+
+    // Update last mouse position
+    lastMousePos = [...mousePos];
 
     window.requestAnimationFrame(function(currentTime) {
-      previousTime = previousTime + .005;
-      // TODO here check dirty bit and recompile?
-      if (isDirty) {
-        // recompile and clear dirty bit
-        shaderProgram = buildShaderProgram();
-        isDirty = false;
-      }
-      animateScene();
+        previousTime = previousTime + .005;
+        if (isDirty) {
+            shaderProgram = buildShaderProgram();
+            isDirty = false;
+        }
+        animateScene();
     });
 }
 
@@ -442,6 +517,25 @@ function buildShaderProgram() {
         console.log("Error linking shader program:");
         console.log(gl.getProgramInfoLog(program));
   }
+
+  return program;
+}
+
+
+// Add this helper function
+function createShaderProgram(vertexSource, fragmentSource) {
+  const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(vertexShader, vertexSource);
+  gl.compileShader(vertexShader);
+
+  const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+  gl.shaderSource(fragmentShader, fragmentSource);
+  gl.compileShader(fragmentShader);
+
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
 
   return program;
 }
@@ -514,6 +608,63 @@ function webgl_startup() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
+  // Create framebuffer and texture for mouse trail
+  mouseTrailFramebuffer = gl.createFramebuffer();
+  mouseTrailTexture1 = createTexture();
+  mouseTrailTexture2 = createTexture();
+  currentMouseTrailTexture = mouseTrailTexture1;
+  prevMouseTrailTexture = mouseTrailTexture2;
+
+  // Create shader program for mouse trail
+  const mouseTrailFragment = `
+      precision mediump float;
+      uniform vec2 u_resolution;
+      uniform vec2 u_mouse;
+      uniform vec2 u_lastMouse;
+      uniform sampler2D u_prevTrail;
+      
+      const float m = 7.;
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+    vec4 prevTrail = texture2D(u_prevTrail, uv);
+    
+    // Calculate distance from mouse position
+    float dist = length(uv - u_mouse);
+    
+    // Create sharp white center with exponential falloff
+    float centerRadius = 0.02; // Size of white center
+    float falloffStrength = 4.0; // Controls how quickly the falloff occurs
+    float falloff = 1.0;
+    
+    if (dist > centerRadius) {
+        // Exponential falloff: e^(-distance * strength)
+        falloff = exp(-(dist - centerRadius) * falloffStrength);
+    }
+        else{
+        gl_FragColor = vec4(1);
+      return;
+        }
+    
+    // Create trail
+    vec4 newTrail = vec4(falloff);
+    
+    // Blend between frames with fade
+    float fadeSpeed = 0.97;
+    vec4 ret = mix(newTrail, prevTrail * fadeSpeed, step(newTrail.r, prevTrail.r));
+    
+    gl_FragColor = ret;
+}
+  `;
+  mouseTrailProgram = createShaderProgram(vertexShader(), mouseTrailFragment);
+  // Initialize array of history textures
+  for (let i = 0; i < FRAME_HISTORY_SIZE; i++) {
+      frameHistoryTextures.push(createTexture());
+      // Initialize each texture with blank data
+      gl.bindTexture(gl.TEXTURE_2D, frameHistoryTextures[i]);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  }
+
   animateScene();
 }
 
@@ -549,6 +700,19 @@ window.addEventListener('resize', function() {
     // Update window capture canvas size
     windowCanvas.width = window.innerWidth;
     windowCanvas.height = window.innerHeight;
+
+    // Resize both mouse trail textures
+    gl.bindTexture(gl.TEXTURE_2D, mouseTrailTexture1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    
+    gl.bindTexture(gl.TEXTURE_2D, mouseTrailTexture2);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+    // Resize all history textures
+    frameHistoryTextures.forEach(texture => {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    });
   }
 });
 
