@@ -59,7 +59,7 @@ const shaderParam = urlParams.get('shader');
 const shaders = [_fragmentShaderG,_fragmentShaderF, _fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD, _fragmentShaderE];
 
 // Set currentShaderIndex based on URL parameter or default to 2
-currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 0;
+currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 6;
 
 // Ensure currentShaderIndex is within valid range
 currentShaderIndex = currentShaderIndex %shaders.length ;
@@ -207,14 +207,9 @@ function onMIDIFailure(error) {
 }
 
 function onMIDIMessage(message) {
-  // Toggle d for every MIDI message received
-  //toggleD(message.data[0]);
-  d = (message.data[0] == 144);
-  m = message.data[0]
-  // You can add more specific MIDI handling here if needed
+  // Simplify to just set m to 1 when any MIDI message is received
+  m = 1;
   console.log('MIDI data', message.data[0]);
-
-
 }
 
 // Call this function to set up the listeners
@@ -330,14 +325,14 @@ window.onload = (event) => {
 }
 
 // Add these variables at the top with other state storage
-const FRAME_HISTORY_SIZE = 15;
-const FRAME_CAPTURE_INTERVAL = 1000; // 10 seconds in milliseconds
+const FRAME_HISTORY_SIZE = 14;
+const FRAME_CAPTURE_INTERVAL = 500; // 10 seconds in milliseconds
 let frameHistoryTextures = [];
 let lastFrameCapture = 0;
 let historyIndex = 0; // Track where we are in the history array
 
 let lastCaptureTime = 0;
-const CAPTURE_INTERVAL = 1000; // Capture every 1000ms
+const CAPTURE_INTERVAL = 500; // Capture every 1000ms
 
 let mouseTrailTexture1;
 let mouseTrailTexture2;
@@ -348,7 +343,42 @@ let mouseTrailProgram;
 let mousePos = [0, 0];
 let lastMousePos = [0, 0];
 
+// Add these variables at the top
+let videoElement;
+let webcamTexture;
 
+// Add this to webgl_startup()
+function setupWebcam() {
+    // Create video element
+    videoElement = document.createElement('video');
+    videoElement.style.display = 'none';
+    document.body.appendChild(videoElement);
+
+    // Create webcam texture
+    webcamTexture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, webcamTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+    // Start webcam stream
+    navigator.mediaDevices.getUserMedia({ video: true })
+        .then(stream => {
+            videoElement.srcObject = stream;
+            videoElement.play();
+        })
+        .catch(err => {
+            console.error("Error accessing webcam:", err);
+        });
+}
+
+// Add webcam texture update to animateScene()
+function updateWebcamTexture() {
+    if (videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+        gl.bindTexture(gl.TEXTURE_2D, webcamTexture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, videoElement);
+    }
+}
 
 // Add mouse move listener
 document.addEventListener('mousemove', (e) => {
@@ -457,6 +487,13 @@ function animateScene() {
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, windowTexture);
     gl.uniform1i(uWindow, 1);
+
+    // Update and bind webcam texture
+    updateWebcamTexture();
+    const uWebcam = gl.getUniformLocation(shaderProgram, "u_webcam");
+    gl.activeTexture(gl.TEXTURE5); // Use next available texture unit
+    gl.bindTexture(gl.TEXTURE_2D, webcamTexture);
+    gl.uniform1i(uWebcam, 5);
 
     // Draw to framebuffer
     gl.drawArrays(gl.TRIANGLES, 0, vertexCount);
@@ -664,6 +701,8 @@ void main() {
       gl.bindTexture(gl.TEXTURE_2D, frameHistoryTextures[i]);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, glCanvas.width, glCanvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
   }
+
+  setupWebcam();
 
   animateScene();
 }
