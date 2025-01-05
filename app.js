@@ -126,7 +126,8 @@ io.on("connection", function(socket) {
     }
       else{
         console.log("CHANGE");
-        _code = await sendMessage("can you pretend you are speaking as the code here and I can have a conversation with the code. Just immideiately respond as the code no intro needed. just respond as the code\n"+code.fs);;
+        // _code = await sendMessage("can you pretend you are speaking as the code here and I can have a conversation with the code. Just immideiately respond as the code no intro needed. just respond as the code\n"+code.fs);;
+        _code = await sendMessage("can you take this glsl code and make it 42 lines, always make sure the code is 42 lines long. Just immideiately respond the code no intro needed. just respond with the code. uniforms are u_resolution, u_time, input is gl_FragCoord.xy/u_resolution, output is gl_FragColor. the top must have #ifdef GL_ESprecision mediump float; #endif. Dont send anything else than the 42 lines of code please, it must have 42 newline characters in it '\\n' \n"+code.fs);;
 
     }
     //if(code.who == process.env.EDITOR){

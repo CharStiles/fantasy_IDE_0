@@ -15,7 +15,7 @@ var gl;
 
 var editor;
 let glCanvas = null;
-
+let sentCode = false;
 
 // Current state storage
 var isDirty = false;
@@ -46,7 +46,6 @@ let hasError =false;
 // Animation timing
 let previousTime = 0.0;
 // this script is from cut-ruby.glitch.me
-let sentCode = false;
 // so good
 var FFT_SIZE = 512;
 var vol;
@@ -56,10 +55,10 @@ let m = 0;
 let currentShaderIndex = 1;
 const urlParams = new URLSearchParams(window.location.search);
 const shaderParam = urlParams.get('shader');
-const shaders = [_fragmentShaderG,_fragmentShaderF, _fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD, _fragmentShaderE];
+const shaders = [_fragmentShaderF,_fragmentShaderG, _fragmentShaderA, _fragmentShaderB, _fragmentShaderC, _fragmentShaderD, _fragmentShaderE];
 
 // Set currentShaderIndex based on URL parameter or default to 2
-currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 6;
+currentShaderIndex = shaderParam ? parseInt(shaderParam, 10) : 0;
 
 // Ensure currentShaderIndex is within valid range
 currentShaderIndex = currentShaderIndex %shaders.length ;
@@ -248,7 +247,30 @@ function addCodeMirrorEditorModifier() {
 }
 
 function init() {
- 
+  // Create flash overlay element
+  const flashOverlay = document.createElement('div');
+  flashOverlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 9999;
+    display: none;
+    background-color: rgba(255, 0, 0, 0.3);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    font-size: 48px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  `;
+  flashOverlay.textContent = "CORRECTION to 42 LINES";
+  document.body.appendChild(flashOverlay);
+
   //set time now to timesincestuck
   timeSinceStuck = Date.now();
   // SOCKET IO
@@ -269,22 +291,53 @@ function init() {
  
   addCodeMirrorEditorModifier()
   socket.on('code', function(shaderCode) {
-    console.log("got code from socketIO")
+    console.log("got code from socketIO");
     
-    _fragmentShader = shaderCode;
+    // Split code into lines
+    let lines = shaderCode.split('\n');
+    
+    // If too many lines, combine or remove empty lines
+    while (lines.length > 42) {
+      // First try to remove empty lines
+      let emptyLineIndex = lines.findIndex(line => line.trim() === '');
+      if (emptyLineIndex !== -1) {
+        lines.splice(emptyLineIndex, 1);
+        continue;
+      }
+      
+      // If no empty lines, try to combine short lines with comments
+      for (let i = 0; i < lines.length - 1; i++) {
+        if (lines[i].includes('//') && lines[i + 1].includes('//')) {
+          lines[i] = lines[i] + '; ' + lines[i + 1];
+          lines.splice(i + 1, 1);
+          break;
+        }
+      }
+      
+      // If still too long, just remove the last line
+      if (lines.length > 42) {
+        lines.pop();
+      }
+    }
+    
+    // If too few lines, add empty comments
+    while (lines.length < 42) {
+      lines.push('// ...');
+    }
+    
+    // Rejoin the lines
+    _fragmentShader = lines.join('\n');
+    editor.setValue(_fragmentShader);
 
-   // needsUpdate = true;
+    // Flash the overlay
+    flashOverlay.style.display = 'block';
+    
+    setTimeout(() => {
+      flashOverlay.style.display = 'none';
+    }, 300);
+
     sentCode = false;
     hasError = false;
-    //editor.setValue(shaderCode);
-    navigator.clipboard.writeText(shaderCode).then(() => {
-      console.log('Shader code copied to clipboard');
-    }).catch(err => {
-      console.error('Failed to copy shader code: ', err);
-    });
-    //onEdit()
-    //console.log("got code from socketIO")
-
   });
 
   setupEscapeHandler();
@@ -821,6 +874,9 @@ function checkFragmentShader(shaderCode, lint = false) {
     console.log("did update");
     _fragmentShader = shaderCode;
     isDirty = true;
+  }
+  if (shaderCode.split(/\r?\n/).length !== 42 && !sentCode) {
+    sendCodeOverWire("lineCount", shaderCode);
   }
 
   return ret;
