@@ -262,7 +262,11 @@ function init() {
     mode: "javascript",
     theme: "monokai",
     gutters: ["CodeMirror-lint-markers"],
-    lint: true,
+    lint: {
+      esversion: '11',
+      globals: ['setup', 'draw', 'p5', 'createCanvas', 'background', 'fill', 'noStroke', 'ellipse', 'mouseX', 'mouseY', 'windowWidth', 'windowHeight', 'resizeCanvas'],
+      lintOnChange: true
+    },
     lineWrapping: !isInPresentationMode(),
     autoCloseBrackets: true,
     matchBrackets: true,
@@ -309,95 +313,58 @@ function updateSketch(code) {
   }
 
   try {
-    // Create new sketch by evaluating the code in global context
+    // Create new sketch
     const sketchFunction = new Function(`
-      // Local scope for sketch variables
       ${code}
-      
-      // Make setup and draw globally available
       window.setup = setup;
       window.draw = draw;
-      
-      // Make any other defined p5 functions globally available
-      if (typeof windowResized !== 'undefined') window.windowResized = windowResized;
-      if (typeof mousePressed !== 'undefined') window.mousePressed = mousePressed;
-      if (typeof mouseDragged !== 'undefined') window.mouseDragged = mouseDragged;
-      if (typeof mouseReleased !== 'undefined') window.mouseReleased = mouseReleased;
-      if (typeof keyPressed !== 'undefined') window.keyPressed = keyPressed;
-      if (typeof keyReleased !== 'undefined') window.keyReleased = keyReleased;
     `);
     
-    // Execute the sketch function
     sketchFunction();
-    
-    // Create new p5 instance in global mode
     window.myp5 = new p5();
     
-    console.log("Sketch updated successfully");
+    // Clear any existing error markers
+    editor.clearGutter("CodeMirror-lint-markers");
+    
   } catch (error) {
     console.error("Error updating sketch:", error);
-    // Show error in editor
-    const errorAnnotation = {
-      from: CodeMirror.Pos(0, 0),
-      to: CodeMirror.Pos(editor.lineCount(), 0),
-      message: error.message,
-      severity: 'error'
-    };
-    editor.setGutterMarker(0, "CodeMirror-lint-markers", makeMarker(error.message));
-    editor.getDoc().setGutterMarker(0, "CodeMirror-lint-markers", makeMarker(error.message));
+    
+    // Parse error line number from stack trace
+    const lineMatch = error.stack.match(/\<anonymous\>:(\d+)/);
+    const lineNumber = lineMatch ? parseInt(lineMatch[1], 10) - 2 : 0; // Subtract 2 to account for wrapper function
+    
+    // Create error marker
+    const marker = document.createElement("div");
+    marker.className = "CodeMirror-lint-marker-error";
+    marker.title = error.message;
+    
+    // Add error marker to gutter
+    editor.setGutterMarker(lineNumber, "CodeMirror-lint-markers", marker);
+    
+    // Add error styling to the line
+    editor.addLineClass(lineNumber, "background", "CodeMirror-lint-line-error");
+    
+    // Mark text as error
+    editor.markText(
+      {line: lineNumber, ch: 0},
+      {line: lineNumber, ch: editor.getLine(lineNumber).length},
+      {className: "CodeMirror-lint-mark-error", title: error.message}
+    );
   }
 }
 
-// Function to create error marker
-function makeMarker(msg) {
-  const marker = document.createElement("div");
-  marker.classList.add("CodeMirror-lint-marker-error");
-  marker.title = msg;
-  return marker;
-}
-
-// Replace shader validation with p5.js validation
-function validateP5Code(code) {
-  try {
-    // Try to create a function from the code to check syntax
-    new Function(code);
-    return []; // Return empty array if no errors
-  } catch (error) {
-    // Parse the error to get line and column information
-    const errorInfo = parseError(error);
-    return [{
-      message: error.message,
-      severity: "error",
-      from: CodeMirror.Pos(errorInfo.line - 1, errorInfo.col),
-      to: CodeMirror.Pos(errorInfo.line - 1, errorInfo.col + 1)
-    }];
+// Add some CSS for error styling
+const style = document.createElement('style');
+style.textContent = `
+  .CodeMirror-lint-mark-error {
+    background-color: rgba(255, 0, 0, 0.2);
+    border-bottom: 1px wavy red;
   }
-}
-
-// Helper function to parse error information
-function parseError(error) {
-  const match = error.stack.match(/\<anonymous\>:(\d+):(\d+)/);
-  if (match) {
-    return {
-      line: parseInt(match[1], 10),
-      col: parseInt(match[2], 10)
-    };
+  .CodeMirror-lint-line-error {
+    background-color: rgba(255, 0, 0, 0.1);
   }
-  return { line: 1, col: 0 };
-}
-
-// Update the CodeMirror linting helper
-(function(mod) {
-  mod(CodeMirror);
-})(function(CodeMirror) {
-  "use strict";
-
-  function validator(text, options) {
-    return validateP5Code(text);
-  }
-
-  CodeMirror.registerHelper("lint", "javascript", validator);
-});
+`;
+document.head.appendChild(style);
 
 function defaultP5Sketch() {
   return `
@@ -720,16 +687,3 @@ function checkFragmentShader(shaderCode, lint = false) {
 
   return ret;
 }
-
-// Update the CodeMirror linting helper
-(function(mod) {
-  mod(CodeMirror);
-})(function(CodeMirror) {
-  "use strict";
-
-  function validator(text, options) {
-    return validateP5Code(text);
-  }
-
-  CodeMirror.registerHelper("lint", "javascript", validator);
-});
