@@ -15,7 +15,7 @@ async function sendMessage(message) {
 	const response = await openai.createChatCompletion({
 		model: "gpt-4",
 		messages:[{ role: 'user', content: message }],
-		temperature: 1.4,
+		temperature: 1.2,
 		max_tokens: 1900,
 	});
 

@@ -126,7 +126,7 @@ io.on("connection", function(socket) {
     }
       else{
         console.log("CHANGE");
-        _code = await sendMessage("can you pretend you are speaking as the code here and I can have a conversation with the code. Just immideiately respond as the code no intro needed. just respond as the code\n"+code.fs);;
+        _code = await sendMessage("can you pretend you are poetically speaking as the code POETICALLY here. The code is an artist speaking. just respond as the code, please be terse, 1 sentance per line of code\n"+code.fs);;
 
     }
     //if(code.who == process.env.EDITOR){

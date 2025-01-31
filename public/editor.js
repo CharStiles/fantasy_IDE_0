@@ -159,19 +159,6 @@ function getSelectionText() {
 
   return text;
 }
-function handleRightClick(event) {
-  event.preventDefault(); // Prevent the default context menu
-  const selectedText = getSelectionText();
-  console.log("Selected text:", selectedText);
-  if (selectedText != ""){
-  sendCodeOverWire("normal", selectedText);
-  }
-  // You can perform any action with the selected text here
-}
-
-// Add event listener to the document
-document.addEventListener('contextmenu', handleRightClick);
-
 
 let d = 0; // Initialize the global variable d
 
@@ -252,8 +239,87 @@ function addCodeMirrorEditorModifier() {
   if (codeMirrorDiv) codeMirrorDiv.classList.add("CodeMirror-editor");
 }
 
+// Add socket message display panel
+function addSocketMessagePanel() {
+  const panel = document.createElement('div');
+  panel.id = 'socket-message-panel';
+  panel.style.cssText = `
+    position: fixed;
+    top: 60px;  /* Below the compile button */
+    right: 10px;
+    width: 300px;
+    max-height: 80vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    color: #fff;
+    padding: 15px;
+    border-radius: 5px;
+    font-family: monospace;
+    overflow-y: auto;
+    z-index: 9999;
+  `;
+  document.body.appendChild(panel);
+
+  // Add title
+  const title = document.createElement('div');
+  title.textContent = 'conSoul:';
+  title.style.cssText = `
+    font-size: 14px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  `;
+  panel.appendChild(title);
+
+  // Add message container
+  const messageContainer = document.createElement('div');
+  messageContainer.id = 'socket-messages';
+  panel.appendChild(messageContainer);
+}
+
+function updateSocketMessage(message) {
+  const container = document.getElementById('socket-messages');
+  if (container) {
+    // Create message element
+    const messageElement = document.createElement('div');
+    messageElement.style.cssText = `
+      margin-bottom: 10px;
+      padding: 8px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    `;
+    messageElement.textContent = message;
+
+    // Add timestamp
+    const timestamp = document.createElement('div');
+    timestamp.style.cssText = `
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-top: 4px;
+    `;
+    timestamp.textContent = new Date().toLocaleTimeString();
+    messageElement.appendChild(timestamp);
+
+    // Add to container
+    container.insertBefore(messageElement, container.firstChild);
+
+    // Limit number of messages (keep last 10)
+    while (container.children.length > 10) {
+      container.removeChild(container.lastChild);
+    }
+  }
+}
+
 function init() {
   socket = io();
+
+  // Add socket message listener
+  socket.on('code', (message) => {
+    updateSocketMessage(message);
+  });
 
   var editorContainer = document.getElementById("editor");
   editor = CodeMirror(editorContainer, {
@@ -290,17 +356,89 @@ function init() {
 
   // Initialize p5 sketch
   updateSketch(defaultP5Sketch());
+
+  // Add the socket message panel
+  addSocketMessagePanel();
 }
 
 function addCompileButton() {
-  const button = document.createElement("button");
-  button.innerHTML = "Compile";
-  button.style = "position: fixed; top: 10px; right: 10px; z-index: 1000; padding: 8px 16px;";
-  button.onclick = function() {
+  // Create button container
+  const buttonContainer = document.createElement("div");
+  buttonContainer.style.cssText = `
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    display: flex;
+    gap: 10px;
+  `;
+
+  // Compile button
+  const compileButton = document.createElement("button");
+  compileButton.innerHTML = "Compile";
+  compileButton.style.cssText = `
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    background: #666;
+    color: white;
+    cursor: pointer;
+  `;
+  compileButton.onclick = function() {
     const code = editor.getValue();
     updateSketch(code);
   };
-  document.body.appendChild(button);
+
+  // Send button
+  const sendButton = document.createElement("button");
+  sendButton.innerHTML = "Send";
+  sendButton.style.cssText = `
+    padding: 8px 16px;
+    border-radius: 4px;
+    border: none;
+    background: #2ecc71;
+    color: white;
+    cursor: pointer;
+  `;
+
+  let isWaitingForResponse = false;
+
+  sendButton.onclick = function() {
+    if (isWaitingForResponse) return;
+    
+    const code = editor.getValue();
+    isWaitingForResponse = true;
+    sendButton.innerHTML = "Loading...";
+    sendButton.style.backgroundColor = "#27ae60"; // Darker shade while loading
+    let selectedText = getSelectionText();
+    if (selectedText == ""){
+      sendCodeOverWire("normal", code);
+    }else{
+      sendCodeOverWire("normal", selectedText);
+    }
+    
+    // Reset button if no response after 5 seconds
+    const responseTimeout = setTimeout(() => {
+      resetButton();
+      sendButton.innerHTML = "error, reload app";
+    }, 10000);
+
+    // Listen for response
+    socket.once('code', () => {
+      clearTimeout(responseTimeout);
+      resetButton();
+    });
+  };
+
+  function resetButton() {
+    isWaitingForResponse = false;
+    sendButton.innerHTML = "Send";
+    sendButton.style.backgroundColor = "#2ecc71";
+  }
+
+  buttonContainer.appendChild(compileButton);
+  buttonContainer.appendChild(sendButton);
+  document.body.appendChild(buttonContainer);
 }
 
 function updateSketch(code) {
