@@ -128,7 +128,23 @@ button:active {
   max-height: 100vh;
   overflow-y: scroll;
 }
+#editor {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000;
+}
 
+#canvas-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
 /* ====================================
   CodeMirror CUSTOM STYLES
 ======================================= */

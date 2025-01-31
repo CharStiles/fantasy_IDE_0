@@ -67,7 +67,7 @@ currentShaderIndex = currentShaderIndex %shaders.length ;
 
 let _fragmentShader = shaders[currentShaderIndex];
 
-let isExpanded = true; // Change initial state to true
+let isExpanded = false; // Initialize to false
 
 window.addEventListener('message', (event) => {
   if (event.data.type === 'setup') {
@@ -253,178 +253,80 @@ function addCodeMirrorEditorModifier() {
 }
 
 function init() {
+ 
+  //set time now to timesincestuck
+  timeSinceStuck = Date.now();
+  // SOCKET IO
   socket = io();
 
   var editorContainer = document.getElementById("editor");
   editor = CodeMirror(editorContainer, {
-    value: defaultP5Sketch(),
+    value: _fragmentShader,
     lineNumbers: true,
-    mode: "javascript",
-    theme: "monokai",
+    mode: "x-shader/x-vertex",
     gutters: ["CodeMirror-lint-markers"],
     lint: true,
-    lineWrapping: !isInPresentationMode(),
-    autoCloseBrackets: true,
-    matchBrackets: true,
-    indentUnit: 2,
-    tabSize: 2,
-    indentWithTabs: false,
-    styleActiveLine: true
+    lineWrapping: !isInPresentationMode()
   });
 
-  // Add compile button
-  addCompileButton();
-  
-  addCodeMirrorEditorModifier();
+  editor.on('change', onEdit);
+  onEdit();
+ 
+  addCodeMirrorEditorModifier()
+  socket.on('code', function(shaderCode) {
+    console.log("got code from socketIO")
+    
+    _fragmentShader = shaderCode;
+
+   // needsUpdate = true;
+    sentCode = false;
+    hasError = false;
+    //editor.setValue(shaderCode);
+    navigator.clipboard.writeText(shaderCode).then(() => {
+      console.log('Shader code copied to clipboard');
+    }).catch(err => {
+      console.error('Failed to copy shader code: ', err);
+    });
+    //onEdit()
+    //console.log("got code from socketIO")
+
+  });
+
   setupEscapeHandler();
-  
-  // Show editor initially
   const editorElement = document.querySelector('.CodeMirror');
   if (editorElement) {
-    editorElement.style.display = 'block';
+    editorElement.style.display = 'none';
   }
 
-  // Initialize p5 sketch
-  updateSketch(defaultP5Sketch());
+  //updateEditorVisibility(); // Hide editor initially
 }
 
-function addCompileButton() {
-  const button = document.createElement("button");
-  button.innerHTML = "Compile";
-  button.style = "position: fixed; top: 10px; right: 10px; z-index: 1000; padding: 8px 16px;";
-  button.onclick = function() {
-    const code = editor.getValue();
-    updateSketch(code);
-  };
-  document.body.appendChild(button);
+
+// this function will trigger a change to the editor
+function onEdit() {
+  isExpanded = true;
+  updateEditorVisibility();
+
+  const fragmentCode = editor.getValue();
+  updateShader(fragmentCode);
 }
 
-function updateSketch(code) {
-  // Remove existing sketch if it exists
-  if (window.myp5) {
-    window.myp5.remove();
-    // Clean up any existing global sketch functions
-    window.setup = undefined;
-    window.draw = undefined;
+function updateShader(fragmentCode) {
+  if (checkFragmentShader(fragmentCode) != []) {
+    console.log("error in shader");
+    return;
   }
+  console.log("NO error in shader");
+  _fragmentShader = fragmentCode;
 
-  try {
-    // Create new sketch by evaluating the code in global context
-    const sketchFunction = new Function(`
-      // Local scope for sketch variables
-      ${code}
-      
-      // Make setup and draw globally available
-      window.setup = setup;
-      window.draw = draw;
-      
-      // Make any other defined p5 functions globally available
-      if (typeof windowResized !== 'undefined') window.windowResized = windowResized;
-      if (typeof mousePressed !== 'undefined') window.mousePressed = mousePressed;
-      if (typeof mouseDragged !== 'undefined') window.mouseDragged = mouseDragged;
-      if (typeof mouseReleased !== 'undefined') window.mouseReleased = mouseReleased;
-      if (typeof keyPressed !== 'undefined') window.keyPressed = keyPressed;
-      if (typeof keyReleased !== 'undefined') window.keyReleased = keyReleased;
-    `);
-    
-    // Execute the sketch function
-    sketchFunction();
-    
-    // Create new p5 instance in global mode
-    window.myp5 = new p5();
-    
-    console.log("Sketch updated successfully");
-  } catch (error) {
-    console.error("Error updating sketch:", error);
-    // Show error in editor
-    const errorAnnotation = {
-      from: CodeMirror.Pos(0, 0),
-      to: CodeMirror.Pos(editor.lineCount(), 0),
-      message: error.message,
-      severity: 'error'
-    };
-    editor.setGutterMarker(0, "CodeMirror-lint-markers", makeMarker(error.message));
-    editor.getDoc().setGutterMarker(0, "CodeMirror-lint-markers", makeMarker(error.message));
-  }
+  isDirty = true;
 }
 
-// Function to create error marker
-function makeMarker(msg) {
-  const marker = document.createElement("div");
-  marker.classList.add("CodeMirror-lint-marker-error");
-  marker.title = msg;
-  return marker;
-}
-
-// Replace shader validation with p5.js validation
-function validateP5Code(code) {
-  try {
-    // Try to create a function from the code to check syntax
-    new Function(code);
-    return []; // Return empty array if no errors
-  } catch (error) {
-    // Parse the error to get line and column information
-    const errorInfo = parseError(error);
-    return [{
-      message: error.message,
-      severity: "error",
-      from: CodeMirror.Pos(errorInfo.line - 1, errorInfo.col),
-      to: CodeMirror.Pos(errorInfo.line - 1, errorInfo.col + 1)
-    }];
-  }
-}
-
-// Helper function to parse error information
-function parseError(error) {
-  const match = error.stack.match(/\<anonymous\>:(\d+):(\d+)/);
-  if (match) {
-    return {
-      line: parseInt(match[1], 10),
-      col: parseInt(match[2], 10)
-    };
-  }
-  return { line: 1, col: 0 };
-}
-
-// Update the CodeMirror linting helper
-(function(mod) {
-  mod(CodeMirror);
-})(function(CodeMirror) {
-  "use strict";
-
-  function validator(text, options) {
-    return validateP5Code(text);
-  }
-
-  CodeMirror.registerHelper("lint", "javascript", validator);
-});
-
-function defaultP5Sketch() {
-  return `
-// Sketch variables can be declared here
-let x = 0;
-
-function setup() {
-  createCanvas(windowWidth, windowHeight);
-  background(220);
-}
-
-function draw() {
-  background(220, 10);
-  fill(255, 0, 0);
-  noStroke();
-  ellipse(mouseX, mouseY, 50, 50);
-}
-
-function windowResized() {
-  resizeCanvas(windowWidth, windowHeight);
-}
-`;
-}
-
-// Remove WebGL-specific functions and keep only necessary ones
 window.onload = (event) => {
+  webgl_startup();
+  console.log("init")
   init();
+
 }
 
 let lastCaptureTime = 0;
@@ -721,15 +623,44 @@ function checkFragmentShader(shaderCode, lint = false) {
   return ret;
 }
 
-// Update the CodeMirror linting helper
+
+
 (function(mod) {
   mod(CodeMirror);
 })(function(CodeMirror) {
-  "use strict";
+"use strict";
 
-  function validator(text, options) {
-    return validateP5Code(text);
+function validator(text, options) {
+  var result = [];
+  var errors = checkFragmentShader(text, true);
+  if (errors) parseErrors(errors, result);
+  return result;
+}
+
+CodeMirror.registerHelper("lint", "x-shader/x-vertex", validator);
+
+function parseErrors(errors, output) {
+  for ( var i = 0; i < errors.length; i++) {
+    var error = errors[i];
+    if (error) {
+      if (Number(error.line) <= 0) {
+        console.warn("Cannot display error (invalid line " + error.line + ")", error);
+        continue;
+      }
+
+      var start = error.character - 1, end = start + 1;
+
+
+      // Convert to format expected by validation service
+      var hint = {
+        message: error.message,
+        severity: "error",
+        from: CodeMirror.Pos(Number(error.line) - 1, start),
+        to: CodeMirror.Pos(Number(error.line) - 1, end)
+      };
+
+      output.push(hint);
+    }
   }
-
-  CodeMirror.registerHelper("lint", "javascript", validator);
+}
 });
