@@ -1,1 +1,5 @@
-its a node app then i made so that you can make different windows appear if you press 2, pressing 1 changes the speed of the windows, 3 delete the windows, 9 adds charbot chatbot, pressing 9 again adds QR code for that pressing 8 i think brings in webcam window
+#Welcome to the fantasy IDE FOL workshop!
+
+for a half hour we will freewrite and then for an hour we will make the IDE of our Fantasies!
+
+LINK TO: [freewrite](https://docs.google.com/document/d/1MLIblXG9h_Y-BcuU1aWCtiaglP-pVEHdrAsbM9WR5jA/edit?tab=t.0)
